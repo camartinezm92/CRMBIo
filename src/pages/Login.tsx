@@ -16,14 +16,14 @@ export default function Login() {
       <Card className="w-full max-w-md relative z-10 border-none shadow-2xl shadow-slate-200/50 rounded-[2.5rem] overflow-hidden">
         <CardHeader className="space-y-4 text-center pt-12 pb-8">
           <div className="flex justify-center">
-            <div className="rounded-3xl bg-primary/10 p-4 shadow-inner">
-              <Stethoscope className="h-10 w-10 text-primary" />
+            <div className="h-20 w-auto max-w-[200px] flex items-center justify-center">
+              <img src="/logo.png" alt="Biotech Logo" className="h-full w-full object-contain" />
             </div>
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">BioMed CRM</CardTitle>
-            <CardDescription className="text-slate-500 text-base">
-              Equipo Biomédicos Aplicativo
+            <CardTitle className="text-4xl font-black tracking-tight text-slate-900">Biotech</CardTitle>
+            <CardDescription className="text-slate-500 text-base font-medium">
+              Gestión de Equipos Biomédicos
             </CardDescription>
           </div>
         </CardHeader>

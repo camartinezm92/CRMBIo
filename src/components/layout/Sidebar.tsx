@@ -101,11 +101,11 @@ export function Sidebar({ isCollapsed }: { isCollapsed?: boolean }) {
         isCollapsed ? "justify-center" : "px-6"
       )}>
         <div className="flex items-center gap-3">
-          <div className="bg-primary/10 p-2 rounded-xl">
-            <Stethoscope className="h-6 w-6 text-primary" />
+          <div className="h-12 w-12 flex items-center justify-center">
+            <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
           </div>
           {!isCollapsed && (
-            <span className="text-xl font-bold tracking-tight text-slate-900 uppercase animate-in fade-in duration-500">BioMed CRM</span>
+            <span className="text-xl font-black tracking-tight text-slate-900 uppercase animate-in fade-in duration-500">Biotech</span>
           )}
         </div>
       </div>

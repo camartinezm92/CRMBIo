@@ -21,12 +21,13 @@ export default function Landing() {
               <ShieldCheck className="h-4 w-4" /> Gestión Tecnológica Hospitalaria
             </div>
             
-            <h1 className="text-5xl lg:text-7xl font-extrabold tracking-tight text-slate-900 leading-[1.1]">
-              Equipo <span className="text-primary">Biomédicos</span> Aplicativo
+            <h1 className="text-6xl lg:text-8xl font-black tracking-tighter text-slate-900 leading-[0.9]">
+              <span className="text-primary italic">Biotech</span><br />
+              Ingeniería <span className="opacity-30">Clínica</span>
             </h1>
             
-            <p className="text-xl text-slate-500 max-w-lg leading-relaxed">
-              Plataforma integral para la gestión de activos, mantenimiento preventivo y cumplimiento normativo en ingeniería clínica.
+            <p className="text-xl text-slate-500 max-w-lg leading-relaxed font-medium">
+              Gestión profesional de activos biomédicos, mantenimiento preventivo y aseguramiento de la calidad hospitalaria.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
@@ -68,9 +69,9 @@ export default function Landing() {
                     <Activity className="h-8 w-8 text-primary" />
                     <div className="h-2 w-12 bg-primary/20 rounded-full" />
                   </div>
-                  <div className="h-48 bg-slate-900 rounded-3xl p-6 flex flex-col justify-between text-white">
-                    <Stethoscope className="h-8 w-8 text-primary" />
-                    <div className="space-y-2">
+                  <div className="h-48 bg-slate-900 rounded-3xl p-6 flex flex-col justify-between text-white overflow-hidden relative">
+                    <img src="/logo.png" alt="Branding" className="h-full w-full object-contain opacity-40 scale-125 -rotate-12 absolute -right-4 -bottom-4" />
+                    <div className="relative z-10 space-y-2">
                       <div className="h-2 w-full bg-white/20 rounded-full" />
                       <div className="h-2 w-2/3 bg-white/20 rounded-full" />
                     </div>
