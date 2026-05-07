@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -22,6 +22,41 @@ import { AuthProvider, useAuth } from './lib/AuthContext';
 import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { mockServices } from './services/mockData';
+
+// Component to handle dynamic page titles
+function PageTitle() {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    const titles: Record<string, string> = {
+      '/': 'Tablero de Control',
+      '/inventory': 'Inventario de Equipos',
+      '/transfers': 'Traslados',
+      '/schedule': 'Cronograma',
+      '/reports': 'Reportes de Mantenimiento',
+      '/forms': 'Formatos de Registro',
+      '/compliance': 'Cumplimiento Normativo',
+      '/alerts': 'Alertas Críticas',
+      '/providers': 'Proveedores Móviles',
+      '/settings': 'Configuración de Alertas',
+      '/users': 'Gestión de Usuarios',
+      '/login': 'Iniciar Sesión',
+      '/welcome': 'Bienvenido',
+      '/pending': 'Pendiente de Aprobación'
+    };
+
+    const path = location.pathname;
+    let title = titles[path] || 'Gestión Biomédica';
+
+    // Handle dynamic paths like /equipment/:id
+    if (path.startsWith('/equipment/')) title = 'Hoja de Vida';
+    if (path.startsWith('/compliance/checklist/')) title = 'Lista de Chequeo';
+    
+    document.title = `Biotech | ${title}`;
+  }, [location]);
+
+  return null;
+}
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -111,6 +146,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <PageTitle />
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

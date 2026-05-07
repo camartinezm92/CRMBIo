@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 import { useAuth } from '@/lib/AuthContext';
+import { useConnectionMonitor } from '@/hooks/useConnectionMonitor';
 
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -25,6 +26,7 @@ import { db } from '@/lib/firebase';
 export function Sidebar({ isCollapsed }: { isCollapsed?: boolean }) {
   const location = useLocation();
   const { logout, user } = useAuth();
+  const { googleStatus } = useConnectionMonitor();
   const [pendingCount, setPendingCount] = React.useState(0);
 
   const UserAvatar = ({ user, className }: { user: any, className?: string }) => {
@@ -148,6 +150,29 @@ export function Sidebar({ isCollapsed }: { isCollapsed?: boolean }) {
           );
         })}
       </nav>
+
+      <div className={cn(
+        "px-6 py-2 border-t border-slate-50 flex items-center gap-2",
+        isCollapsed ? "justify-center px-0" : ""
+      )}>
+        <div className={cn(
+          "w-2 h-2 rounded-full",
+          googleStatus.status === 'ok' ? "bg-emerald-500 animate-pulse" : 
+          googleStatus.status === 'error' ? "bg-rose-500" : "bg-amber-500"
+        )} title={`Estado Google: ${googleStatus.status.toUpperCase()}`} />
+        {!isCollapsed && (
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Google {googleStatus.status === 'ok' ? 'Online' : 'Revisar'}
+            </span>
+            {googleStatus.lastCheck && (
+              <span className="text-[9px] text-slate-300 font-medium leading-none mt-0.5">
+                {new Date(googleStatus.lastCheck).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className={cn(
         "p-4 border-t bg-slate-50/50 transition-all",

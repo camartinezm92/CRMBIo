@@ -7,7 +7,7 @@ import {
   signInWithPopup,
   signOut
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { User } from '../types';
 
@@ -25,86 +25,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeDoc: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubscribeDoc) {
+        unsubscribeDoc();
+        unsubscribeDoc = undefined;
+      }
+
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as any;
-          
-          // Force update for admin email to ensure they have access and correct structure
-          if (firebaseUser.email === 'ingbiomedico@ucihonda.com.co') {
-            const hasCorrectPermissions = userData.permissions && typeof userData.permissions === 'object' && !Array.isArray(userData.permissions);
+        // Listen to User document changes in real-time
+        unsubscribeDoc = onSnapshot(doc(db, 'users', firebaseUser.uid), async (userDoc) => {
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as any;
             
-            if (userData.role !== 'ADMIN' || userData.status !== 'active' || !hasCorrectPermissions) {
-              const updatedAdmin: User = {
-                ...userData,
-                uid: firebaseUser.uid,
-                role: 'ADMIN',
-                status: 'active',
-                gender: userData.gender || 'male',
-                permissions: {
-                  all: { view: true, create: true, edit: true, delete: true },
-                  inventory: { view: true, create: true, edit: true, delete: true },
-                  transfers: { view: true, create: true, edit: true, delete: true },
-                  reports: { view: true, create: true, edit: true, delete: true },
-                  compliance: { view: true, create: true, edit: true, delete: true },
-                  alerts: { view: true, create: true, edit: true, delete: true },
-                  providers: { view: true, create: true, edit: true, delete: true },
-                  schedule: { view: true, create: true, edit: true, delete: true },
-                  forms: { view: true, create: true, edit: true, delete: true },
-                  users: { view: true, create: true, edit: true, delete: true }
-                }
-              };
-              await setDoc(doc(db, 'users', firebaseUser.uid), updatedAdmin);
-              setUser(updatedAdmin);
+            // Force update for admin email to ensure they have access and correct structure
+            if (firebaseUser.email === 'ingbiomedico@ucihonda.com.co') {
+              const hasCorrectPermissions = userData.permissions && typeof userData.permissions === 'object' && !Array.isArray(userData.permissions);
+              
+              if (userData.role !== 'ADMIN' || userData.status !== 'active' || !hasCorrectPermissions) {
+                const updatedAdmin: User = {
+                  ...userData,
+                  uid: firebaseUser.uid,
+                  role: 'ADMIN',
+                  status: 'active',
+                  gender: userData.gender || 'male',
+                  permissions: {
+                    all: { view: true, create: true, edit: true, delete: true },
+                    inventory: { view: true, create: true, edit: true, delete: true },
+                    transfers: { view: true, create: true, edit: true, delete: true },
+                    reports: { view: true, create: true, edit: true, delete: true },
+                    compliance: { view: true, create: true, edit: true, delete: true },
+                    alerts: { view: true, create: true, edit: true, delete: true },
+                    providers: { view: true, create: true, edit: true, delete: true },
+                    schedule: { view: true, create: true, edit: true, delete: true },
+                    forms: { view: true, create: true, edit: true, delete: true },
+                    users: { view: true, create: true, edit: true, delete: true }
+                  }
+                };
+                await setDoc(doc(db, 'users', firebaseUser.uid), updatedAdmin);
+                setUser(updatedAdmin);
+              } else {
+                setUser(userData);
+              }
             } else {
-              setUser(userData);
+              // Normalize existing roles if they are lowercase
+              let updatedData = { ...userData };
+              if (updatedData.role === 'admin' as any) updatedData.role = 'ADMIN';
+              if (updatedData.role === 'user' as any) updatedData.role = 'USER';
+              // Default gender if missing
+              if (!updatedData.gender) updatedData.gender = 'male';
+              setUser(updatedData);
             }
           } else {
-            // Normalize existing roles if they are lowercase
-            let updatedData = { ...userData };
-            if (updatedData.role === 'admin' as any) updatedData.role = 'ADMIN';
-            if (updatedData.role === 'user' as any) updatedData.role = 'USER';
-            // Default gender if missing
-            if (!updatedData.gender) updatedData.gender = 'male';
-            setUser(updatedData);
+            // Check if it's the admin email
+            const isAdmin = firebaseUser.email === 'ingbiomedico@ucihonda.com.co';
+            
+            const newUser: User = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              role: isAdmin ? 'ADMIN' : 'USER',
+              status: isAdmin ? 'active' : 'pending',
+              gender: 'male',
+              permissions: isAdmin ? {
+                 all: { view: true, create: true, edit: true, delete: true },
+                 inventory: { view: true, create: true, edit: true, delete: true },
+                 transfers: { view: true, create: true, edit: true, delete: true },
+                 reports: { view: true, create: true, edit: true, delete: true },
+                 compliance: { view: true, create: true, edit: true, delete: true },
+                 alerts: { view: true, create: true, edit: true, delete: true },
+                 providers: { view: true, create: true, edit: true, delete: true },
+                 schedule: { view: true, create: true, edit: true, delete: true },
+                 forms: { view: true, create: true, edit: true, delete: true },
+                 users: { view: true, create: true, edit: true, delete: true }
+              } : {}
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+            setUser(newUser);
           }
-        } else {
-          // Check if it's the admin email
-          const isAdmin = firebaseUser.email === 'ingbiomedico@ucihonda.com.co';
-          
-          const newUser: User = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            role: isAdmin ? 'ADMIN' : 'USER',
-            status: isAdmin ? 'active' : 'pending',
-            gender: 'male',
-            permissions: isAdmin ? {
-               all: { view: true, create: true, edit: true, delete: true },
-               inventory: { view: true, create: true, edit: true, delete: true },
-               transfers: { view: true, create: true, edit: true, delete: true },
-               reports: { view: true, create: true, edit: true, delete: true },
-               compliance: { view: true, create: true, edit: true, delete: true },
-               alerts: { view: true, create: true, edit: true, delete: true },
-               providers: { view: true, create: true, edit: true, delete: true },
-               schedule: { view: true, create: true, edit: true, delete: true },
-               forms: { view: true, create: true, edit: true, delete: true },
-               users: { view: true, create: true, edit: true, delete: true }
-            } : {}
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
-          setUser(newUser);
-        }
+          setLoading(false);
+        });
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDoc) unsubscribeDoc();
+    };
   }, []);
 
   const loginWithGoogle = async () => {

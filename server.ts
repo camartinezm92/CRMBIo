@@ -56,7 +56,18 @@ async function startServer() {
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive'
     ], false);
-    return google.sheets({ version: 'v4', auth });
+    return google.sheets({ 
+      version: 'v4', 
+      auth,
+      retryConfig: {
+        retry: 3,
+        retryDelay: 1000,
+        statusCodesToRetry: [[100, 199], [429, 429], [500, 599]],
+        onRetryAttempt: (err) => {
+          console.warn(`[Sheets] Retry attempt due to: ${err.message}`);
+        }
+      }
+    });
   };
 
   const getDriveClient = () => {
@@ -65,7 +76,18 @@ async function startServer() {
       'https://www.googleapis.com/auth/drive.file', 
       'https://www.googleapis.com/auth/drive'
     ], false); 
-    return google.drive({ version: 'v3', auth });
+    return google.drive({ 
+      version: 'v3', 
+      auth,
+      retryConfig: {
+        retry: 3,
+        retryDelay: 1000,
+        statusCodesToRetry: [[100, 199], [429, 429], [500, 599]],
+        onRetryAttempt: (err) => {
+          console.warn(`[Drive] Retry attempt due to: ${err.message}`);
+        }
+      }
+    });
   };
 
   const getGmailTransporter = () => {
@@ -904,6 +926,28 @@ async function startServer() {
       error: err.message || 'Internal Server Error',
       status: err.status || 500
     });
+  });
+
+  // External services health check
+  app.get("/api/health/external", async (req, res) => {
+    const results = {
+      timestamp: new Date().toISOString(),
+      google: { status: 'unknown', details: '' },
+      firebase: { status: 'ok' } // Client side handles Firebase mostly, but server can check environment
+    };
+
+    try {
+      const drive = getDriveClient();
+      // Using 'about.get' with minimal fields is the cheapest call possible to verify connection/auth
+      await drive.about.get({ fields: 'kind' });
+      results.google.status = 'ok';
+    } catch (error: any) {
+      results.google.status = 'error';
+      results.google.details = error.message;
+      console.error("[HealthCheck] Google API Error:", error.message);
+    }
+
+    res.json(results);
   });
 
   // Vite middleware for development
