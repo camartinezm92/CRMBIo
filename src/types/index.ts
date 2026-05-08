@@ -28,7 +28,10 @@ export interface Equipment {
   assetNumber: string;
   serviceId: string;
   serviceName?: string;
-  status: 'active' | 'maintenance' | 'out_of_service' | 'paused';
+  status: 'active' | 'maintenance' | 'out_of_service' | 'paused' | 'reserva' | 'baja_repuestos' | 'baja';
+  decommissioningActUrl?: string; // URL for "Acta de Baja" document
+  decommissioningDate?: string;
+  decommissioningReason?: string;
   riskClass: 'I' | 'IIa' | 'IIb' | 'III';
   biomedicalType: 'diagnostic' | 'treatment' | 'rehabilitation' | 'support';
   acquisitionDate?: string;

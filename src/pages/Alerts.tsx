@@ -102,6 +102,9 @@ export default function Alerts() {
       const eqAlerts: AppAlert[] = [];
 
       equipmentData.forEach(eq => {
+        // Skip decommissioned equipment
+        if (['baja', 'baja_repuestos'].includes(eq.status)) return;
+
         // 1. Check INVIMA Expiration
         if (eq.registrationExpiration) {
           const expiration = parseISO(eq.registrationExpiration);

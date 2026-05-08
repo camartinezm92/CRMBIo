@@ -474,13 +474,29 @@ export default function EquipmentLifeCycle() {
               <div className="flex justify-between items-center pt-2">
                 <span className="text-sm font-bold text-slate-400 uppercase tracking-tighter">Estado Operativo</span>
                 <Badge 
-                  variant={equipment.status === 'active' ? 'default' : 'secondary'}
+                  variant={
+                    equipment.status === 'active' ? 'default' : 
+                    equipment.status === 'maintenance' ? 'secondary' : 
+                    equipment.status === 'paused' ? 'outline' : 
+                    equipment.status === 'reserva' ? 'outline' :
+                    'destructive'
+                  }
                   className={cn(
                     "rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-widest",
-                    equipment.status === 'active' ? "bg-emerald-500" : "bg-slate-200 text-slate-600"
+                    equipment.status === 'active' && "bg-emerald-500",
+                    equipment.status === 'paused' && "border-amber-500 text-amber-600 bg-amber-50",
+                    equipment.status === 'reserva' && "border-blue-500 text-blue-600 bg-blue-50",
+                    equipment.status === 'baja_repuestos' && "bg-slate-500",
+                    equipment.status === 'baja' && "bg-slate-900 border-none"
                   )}
                 >
-                  {equipment.status === 'active' ? 'Operativo' : equipment.status}
+                  {equipment.status === 'active' ? 'Operativo' : 
+                   equipment.status === 'maintenance' ? 'En Manto.' : 
+                   equipment.status === 'paused' ? 'En Pausa' : 
+                   equipment.status === 'reserva' ? 'Reserva' :
+                   equipment.status === 'baja_repuestos' ? 'Baja Repuestos' :
+                   equipment.status === 'baja' ? 'Baja' :
+                   'Fuera de Serv.'}
                 </Badge>
               </div>
             </div>

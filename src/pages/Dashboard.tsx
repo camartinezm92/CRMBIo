@@ -73,6 +73,7 @@ export default function Dashboard() {
       
       const pendingManto = data.filter(e => {
         if (!e.nextMaintenance) return false;
+        if (['baja', 'baja_repuestos'].includes(e.status)) return false;
         const nextDate = new Date(e.nextMaintenance);
         const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         return diffDays < 7;
@@ -119,6 +120,9 @@ export default function Dashboard() {
 
     // A. Equipment Alerts
     equipment.forEach(eq => {
+      // Skip decommissioned equipment
+      if (['baja', 'baja_repuestos'].includes(eq.status)) return;
+
       // INVIMA
       if (eq.registrationExpiration) {
         const expiration = parseISO(eq.registrationExpiration);
@@ -172,8 +176,10 @@ export default function Dashboard() {
   }, [equipment, services, submissions, config, dismissedMap]);
 
   const totalEquip = equipment.length;
-  const outOfService = equipment.filter(e => e.status === 'out_of_service' || e.status === 'maintenance');
-  const operationalPercent = totalEquip > 0 ? Math.round(((totalEquip - outOfService.length) / totalEquip) * 100) : 100;
+  const outOfService = equipment.filter(e => e.status === 'out_of_service' || e.status === 'maintenance' || e.status === 'paused');
+  const decommissioned = equipment.filter(e => e.status === 'baja' || e.status === 'baja_repuestos');
+  const activeEquipCount = totalEquip - decommissioned.length;
+  const operationalPercent = activeEquipCount > 0 ? Math.round(((activeEquipCount - outOfService.length) / activeEquipCount) * 100) : 100;
 
   const stats = [
     {

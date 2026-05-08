@@ -29,7 +29,9 @@ import {
   ArrowDown,
   HardDrive,
   CheckCircle2,
-  Database
+  Database,
+  ArrowLeftRight,
+  FileUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
@@ -46,6 +48,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import EquipmentForm from '@/components/forms/EquipmentForm';
@@ -64,6 +74,10 @@ export default function Inventory() {
   const [editingEquipment, setEditingEquipment] = React.useState<Equipment | undefined>(undefined);
   const [equipmentToDelete, setEquipmentToDelete] = React.useState<Equipment | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [statusToChange, setStatusToChange] = React.useState<Equipment | null>(null);
+  const [newStatus, setNewStatus] = React.useState<string>('');
+  const [decommFile, setDecommFile] = React.useState<File | null>(null);
+  const [updatingStatus, setUpdatingStatus] = React.useState(false);
   const [sortConfig, setSortConfig] = React.useState<{ key: keyof Equipment | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'out_of_service' | 'maintenance' | 'calibration'>('all');
   const [typeFilter, setTypeFilter] = React.useState<string>('all');
@@ -232,6 +246,72 @@ export default function Inventory() {
 
     setEditingEquipment(duplicateData);
     setShowForm(true);
+  };
+
+  const handleUpdateStatus = async () => {
+    if (!statusToChange || !newStatus) return;
+    
+    setUpdatingStatus(true);
+    try {
+      let decommUrl = statusToChange.decommissioningActUrl || '';
+      
+      if (newStatus === 'baja' && decommFile) {
+        // Upload to Drive via proxy
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(decommFile);
+        });
+        
+        const uploadRes = await fetch('/api/drive/upload-document', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             equipmentId: statusToChange.id,
+             name: `Acta_Baja_${statusToChange.assetNumber}.pdf`,
+             base64,
+             mimeType: decommFile.type || 'application/pdf',
+             folderId: statusToChange.driveFolderId
+           })
+        });
+        
+        if (uploadRes.ok) {
+          const driveData = await uploadRes.json();
+          decommUrl = driveData.url;
+        }
+      }
+
+      await updateDoc(doc(db, 'equipment', statusToChange.id), {
+        status: newStatus,
+        updatedAt: serverTimestamp(),
+        ...(newStatus === 'baja' ? { 
+          decommissioningActUrl: decommUrl,
+          decommissioningDate: new Date().toISOString().split('T')[0]
+        } : {})
+      });
+
+      // Add to history
+      await addDoc(collection(db, 'reports'), {
+        equipmentId: statusToChange.id,
+        equipmentName: statusToChange.name,
+        type: 'corrective',
+        status: 'completed',
+        date: new Date().toISOString().split('T')[0],
+        description: `Cambio de estado manual a: ${newStatus.toUpperCase()}.`,
+        workPerformed: newStatus === 'baja' ? 'Equipo dado de baja institucional.' : `Equipo movido a estado ${newStatus}.`,
+        technicianId: user?.uid || 'system',
+        createdAt: serverTimestamp()
+      });
+
+      setStatusToChange(null);
+      setNewStatus('');
+      setDecommFile(null);
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      alert('Error: ' + error.message);
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
   if (showForm) {
@@ -569,22 +649,31 @@ export default function Inventory() {
                     </Badge>
                   </TableCell>
                   <TableCell className="px-6 py-5">
-                    <Badge 
-                      variant={
-                        eq.status === 'active' ? 'default' : 
-                        eq.status === 'maintenance' ? 'secondary' : 
-                        eq.status === 'paused' ? 'outline' : 'destructive'
-                      }
-                      className={cn(
-                        "rounded-lg px-3 py-1 text-[10px] font-bold uppercase tracking-wider",
-                        eq.status === 'active' && "bg-emerald-500 hover:bg-emerald-600",
-                        eq.status === 'paused' && "border-amber-500 text-amber-600 bg-amber-50"
-                      )}
-                    >
-                      {eq.status === 'active' ? 'Operativo' : 
-                       eq.status === 'maintenance' ? 'En Manto.' : 
-                       eq.status === 'paused' ? 'En Pausa' : 'Fuera de Serv.'}
-                    </Badge>
+                      <Badge 
+                        variant={
+                          eq.status === 'active' ? 'default' : 
+                          eq.status === 'maintenance' ? 'secondary' : 
+                          eq.status === 'paused' ? 'outline' : 
+                          eq.status === 'reserva' ? 'outline' : 
+                          'destructive'
+                        }
+                        className={cn(
+                          "rounded-lg px-3 py-1 text-[10px] font-bold uppercase tracking-wider",
+                          eq.status === 'active' && "bg-emerald-500 hover:bg-emerald-600",
+                          eq.status === 'paused' && "border-amber-500 text-amber-600 bg-amber-50",
+                          eq.status === 'reserva' && "border-blue-500 text-blue-600 bg-blue-50",
+                          eq.status === 'baja_repuestos' && "bg-slate-500 hover:bg-slate-600",
+                          eq.status === 'baja' && "bg-slate-900 border-none"
+                        )}
+                      >
+                        {eq.status === 'active' ? 'Operativo' : 
+                         eq.status === 'maintenance' ? 'En Manto.' : 
+                         eq.status === 'paused' ? 'En Pausa' : 
+                         eq.status === 'reserva' ? 'Reserva' :
+                         eq.status === 'baja_repuestos' ? 'Baja Repuestos' :
+                         eq.status === 'baja' ? 'Baja' :
+                         'Fuera de Serv.'}
+                      </Badge>
                   </TableCell>
                   <TableCell className="px-6 py-5">
                     <div className="flex items-center gap-2 text-slate-600 font-bold">
@@ -606,6 +695,9 @@ export default function Inventory() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => { setEditingEquipment(eq); setShowForm(true); }} className="rounded-lg py-2.5 cursor-pointer">
                           <FileEdit className="mr-3 h-4 w-4 text-slate-400" /> Editar Datos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setStatusToChange(eq); setNewStatus(eq.status); }} className="rounded-lg py-2.5 cursor-pointer">
+                          <ArrowLeftRight className="mr-3 h-4 w-4 text-primary" /> Cambiar Estado
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDuplicate(eq)} className="rounded-lg py-2.5 cursor-pointer">
                           <Copy className="mr-3 h-4 w-4 text-slate-400" /> Duplicar Equipo
@@ -678,6 +770,96 @@ export default function Inventory() {
                 <><Trash2 className="mr-2 h-4 w-4" /> Confirmar Eliminación</>
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!statusToChange} onOpenChange={(open) => !open && setStatusToChange(null)}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-slate-900">Cambiar Estado Operativo</DialogTitle>
+            <DialogDescription className="font-medium">
+              Actualice el estado actual de <span className="font-bold">{statusToChange?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 pt-4">
+            <div className="space-y-2">
+              <Label className="font-bold text-slate-700">Nuevo Estado</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Seleccionar estado" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="active">Operativo (Activo)</SelectItem>
+                  <SelectItem value="paused">En Pausa (Revisión)</SelectItem>
+                  <SelectItem value="reserva">Reserva (Backup)</SelectItem>
+                  <SelectItem value="out_of_service">Fuera de Servicio</SelectItem>
+                  <SelectItem value="baja_repuestos">Baja para Repuestos</SelectItem>
+                  <SelectItem value="baja">Baja Definitiva</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {newStatus === 'baja' && (
+              <div className="space-y-3 p-4 bg-rose-50 rounded-2xl border border-rose-100 animate-in fade-in slide-in-from-top-2">
+                <Label className="font-black text-rose-700 text-xs uppercase tracking-widest flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" /> Acta de Baja Requerida
+                </Label>
+                <p className="text-xs text-rose-600 font-medium leading-relaxed">
+                  Para dar de baja un equipo debe adjuntar el acta o documento técnico que soporte la desvinculación.
+                </p>
+                
+                <div 
+                  className={cn(
+                    "mt-2 border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors",
+                    decommFile ? "border-emerald-300 bg-emerald-50/50" : "border-rose-200 hover:bg-rose-100/50"
+                  )}
+                  onClick={() => document.getElementById('decomm-file')?.click()}
+                >
+                  {decommFile ? (
+                    <>
+                      <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                      <p className="text-xs font-bold text-emerald-700">{decommFile.name}</p>
+                    </>
+                  ) : (
+                    <>
+                      <FileUp className="h-6 w-6 text-rose-400" />
+                      <p className="text-xs font-bold text-rose-700">Subir Acta (PDF/Imagen)</p>
+                    </>
+                  )}
+                  <input 
+                    id="decomm-file" 
+                    type="file" 
+                    className="hidden" 
+                    accept=".pdf,image/*" 
+                    onChange={(e) => setDecommFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                className="rounded-xl font-bold" 
+                onClick={() => setStatusToChange(null)}
+                disabled={updatingStatus}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                className="rounded-xl font-bold px-8 shadow-lg shadow-primary/20" 
+                onClick={handleUpdateStatus}
+                disabled={updatingStatus || (newStatus === 'baja' && !decommFile)}
+              >
+                {updatingStatus ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Actualizando...</>
+                ) : (
+                  'Guardar Cambios'
+                )}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

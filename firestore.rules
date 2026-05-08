@@ -25,11 +25,13 @@
 //   - serial: string (required, unique)
 //   - assetNumber: string (required, unique)
 //   - serviceId: string (required, reference to services)
-//   - status: string (required, enum: ['active', 'maintenance', 'out_of_service'])
+//   - status: string (required, enum: ['active', 'maintenance', 'out_of_service', 'paused', 'reserva', 'baja_repuestos', 'baja'])
 //   - lastMaintenance: string (optional, ISO date)
 //   - nextMaintenance: string (optional, ISO date)
 //   - nextCalibration: string (optional, ISO date)
 //   - driveFolderId: string (optional)
+//   - decommissioningActUrl: string (optional, for 'baja' status)
+//   - decommissioningDate: string (optional, for 'baja' status)
 //
 // Collection: reports
 // Document ID: {reportId}
@@ -93,7 +95,7 @@ service cloud.firestore {
       return data.keys().hasAll(['name', 'brand', 'model', 'serial', 'assetNumber', 'serviceId', 'status']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.serial is string && data.serial.size() > 0 &&
-             data.status in ['active', 'maintenance', 'out_of_service', 'paused'];
+             data.status in ['active', 'maintenance', 'out_of_service', 'paused', 'reserva', 'baja_repuestos', 'baja'];
     }
 
     function isValidReport(data) {

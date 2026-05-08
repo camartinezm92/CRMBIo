@@ -74,6 +74,7 @@ export default function Schedule() {
 
   const filteredEquipment = equipmentList.filter(eq => {
     if (serviceFilter !== 'all' && eq.serviceName !== serviceFilter) return false;
+    if (['baja', 'baja_repuestos'].includes(eq.status)) return false;
     return true;
   });
 

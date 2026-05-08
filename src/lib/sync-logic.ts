@@ -29,10 +29,15 @@ export const syncEquipmentWithHistory = async (equipment: Equipment, reports: Ma
   const latestCalib = calibrationReports[0];
 
   // 3. Prepare payload
+  const isTerminalStatus = ['baja', 'baja_repuestos', 'reserva'].includes(equipment.status);
+
   const updatePayload: any = {
     updatedAt: serverTimestamp(),
-    status: 'active', // Default to active if we have reports
-    pauseStartDate: null // Clear pause
+    // If it's a backup (reserva), it remains in that state.
+    // If it's decommissioned, it remains in that state.
+    // Otherwise, we default to active if we are performing a new intervention successfully.
+    status: isTerminalStatus ? equipment.status : 'active',
+    pauseStartDate: isTerminalStatus ? (equipment.pauseStartDate || null) : null
   };
 
   // Update maintenance fields
