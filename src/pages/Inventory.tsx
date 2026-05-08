@@ -19,6 +19,7 @@ import {
   Eye,
   Pause,
   Play,
+  Copy,
   ArrowLeft,
   Clock,
   AlertTriangle,
@@ -216,6 +217,23 @@ export default function Inventory() {
     return result;
   }, [equipmentList, searchTerm, sortConfig, statusFilter, typeFilter]);
 
+  const handleDuplicate = (eq: Equipment) => {
+    // Create a copy of the equipment and remove unique identifiers
+    const { id, serial, assetNumber, temporarySerial, photoId, driveFolderId, manualUrl, technicalSheetUrl, annexes, ...rest } = eq;
+    
+    // We keep mostly technical specs but clear out identifying ones
+    const duplicateData: any = {
+      ...rest,
+      // Clear out fields that must be unique
+      serial: '',
+      assetNumber: '',
+      status: 'active', // Default to active for new clones
+    };
+
+    setEditingEquipment(duplicateData);
+    setShowForm(true);
+  };
+
   if (showForm) {
     return (
       <div className="space-y-8 animate-in fade-in duration-500">
@@ -225,9 +243,11 @@ export default function Inventory() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              {editingEquipment ? 'Editar Equipo' : 'Nuevo Equipo'}
+              {editingEquipment?.id ? 'Editar Equipo' : 'Registrar Nuevo Equipo'}
             </h1>
-            <p className="text-slate-500">Complete la información técnica para el registro.</p>
+            <p className="text-slate-500">
+              {editingEquipment && !editingEquipment.id ? 'Se ha cargado la información técnica. Por favor complete los campos únicos (Serial y Activo Fijo).' : 'Complete la información técnica para el registro.'}
+            </p>
           </div>
         </div>
         <EquipmentForm 
@@ -586,6 +606,9 @@ export default function Inventory() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => { setEditingEquipment(eq); setShowForm(true); }} className="rounded-lg py-2.5 cursor-pointer">
                           <FileEdit className="mr-3 h-4 w-4 text-slate-400" /> Editar Datos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDuplicate(eq)} className="rounded-lg py-2.5 cursor-pointer">
+                          <Copy className="mr-3 h-4 w-4 text-slate-400" /> Duplicar Equipo
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleTogglePause(eq)} className="rounded-lg py-2.5 cursor-pointer">
                           {eq.status === 'paused' ? (

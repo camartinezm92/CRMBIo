@@ -37,9 +37,11 @@ export default function Reports() {
   const [deleting, setDeleting] = React.useState(false);
 
   const handleDownload = (report: MaintenanceReport) => {
-    if (report.attachmentUrl && report.type === 'calibration') {
-      window.open(report.attachmentUrl, '_blank');
+    // If it's an external report or calibration with an attachment, open the link
+    if (report.driveFileUrl || report.attachmentUrl) {
+      window.open(report.driveFileUrl || report.attachmentUrl || '', '_blank');
     } else {
+      // Otherwise generate our digital PDF
       generateMaintenancePDF(report);
     }
   };

@@ -124,6 +124,36 @@ export default function EquipmentForm({ onCancel, initialData, onSuccess }: Equi
     }));
   };
 
+  // Auto-calculate next maintenance date
+  React.useEffect(() => {
+    if (formData.lastMaintenance && formData.maintenanceFrequency) {
+      const last = new Date(formData.lastMaintenance);
+      if (!isNaN(last.getTime())) {
+        const next = new Date(last);
+        next.setMonth(next.getMonth() + Number(formData.maintenanceFrequency));
+        const nextStr = next.toISOString().split('T')[0];
+        if (formData.nextMaintenance !== nextStr) {
+          setFormData(prev => ({ ...prev, nextMaintenance: nextStr }));
+        }
+      }
+    }
+  }, [formData.lastMaintenance, formData.maintenanceFrequency]);
+
+  // Auto-calculate next calibration date
+  React.useEffect(() => {
+    if (formData.lastCalibration && formData.calibrationFrequency) {
+      const last = new Date(formData.lastCalibration);
+      if (!isNaN(last.getTime())) {
+        const next = new Date(last);
+        next.setMonth(next.getMonth() + Number(formData.calibrationFrequency));
+        const nextStr = next.toISOString().split('T')[0];
+        if (formData.nextCalibration !== nextStr) {
+          setFormData(prev => ({ ...prev, nextCalibration: nextStr }));
+        }
+      }
+    }
+  }, [formData.lastCalibration, formData.calibrationFrequency]);
+
   const validateStep = () => {
     if (step === 1) {
       return formData.name && formData.brand && formData.model && formData.serial && formData.assetNumber && formData.serviceId;
@@ -309,7 +339,7 @@ export default function EquipmentForm({ onCancel, initialData, onSuccess }: Equi
     <Card className="max-w-2xl mx-auto shadow-xl border-slate-100 overflow-hidden rounded-3xl">
       <CardHeader className="bg-slate-50/50 border-b pb-8">
         <CardTitle className="text-xl font-bold text-slate-900">
-          {initialData ? 'Editar Equipo' : 'Registro de Nuevo Equipo'}
+          {initialData?.id ? 'Editar Equipo' : 'Registro de Nuevo Equipo'}
         </CardTitle>
         <div className="flex gap-3 mt-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (

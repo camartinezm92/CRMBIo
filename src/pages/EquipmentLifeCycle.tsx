@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
 import { ArrowLeft, ArrowLeftRight, FileText, History, ShieldCheck, Wrench, Download, ExternalLink, Info, Loader2, Clock, Pause, Image as ImageIcon, Trash2 } from 'lucide-react';
-import { doc, onSnapshot, collection, query, where, orderBy, deleteDoc } from 'firebase/firestore';
+import { deleteDoc, doc, onSnapshot, collection, query, where, orderBy, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Equipment, MaintenanceReport, Transfer } from '@/types';
+import { syncEquipmentWithHistory } from '@/lib/sync-logic';
 
 import MaintenanceForm from '@/components/forms/MaintenanceForm';
 import { CalibrationForm } from '@/components/forms/CalibrationForm';
@@ -48,19 +49,26 @@ export default function EquipmentLifeCycle() {
   const [isExporting, setIsExporting] = React.useState(false);
 
   const handleDownloadReport = (report: MaintenanceReport) => {
-    if (report.attachmentUrl && report.type === 'calibration') {
-      window.open(report.attachmentUrl, '_blank');
+    // If it's an external report or calibration with an attachment, open the link
+    if (report.driveFileUrl || report.attachmentUrl) {
+      window.open(report.driveFileUrl || report.attachmentUrl || '', '_blank');
     } else {
+      // Otherwise generate our digital PDF
       generateMaintenancePDF(report);
     }
   };
 
   const handleDeleteReport = async () => {
-    if (!reportToDelete) return;
+    if (!reportToDelete || !equipment) return;
     
     setDeletingReport(true);
     try {
       await deleteDoc(doc(db, 'reports', reportToDelete.id));
+      
+      // Force sync after deletion to update lastMaintenance and nextMaintenance
+      const remainingReports = reports.filter(r => r.id !== reportToDelete.id);
+      await syncEquipmentWithHistory(equipment, remainingReports);
+      
       setReportToDelete(null);
     } catch (error) {
       console.error('Error deleting report:', error);
@@ -127,6 +135,8 @@ export default function EquipmentLifeCycle() {
         id: doc.id
       })) as MaintenanceReport[];
       setReports(data);
+
+      // We handle sync in a separate effect or carefully here
     });
 
     const qTransfers = query(collection(db, 'transfers'), where('equipmentId', '==', id), orderBy('date', 'desc'));
@@ -145,6 +155,44 @@ export default function EquipmentLifeCycle() {
       unsubscribeTransfers();
     };
   }, [id]);
+
+  // --- AUTO-SYNC LOGIC ---
+  React.useEffect(() => {
+    const checkSync = async () => {
+      if (equipment && reports.length > 0) {
+        const maintenanceReports = reports
+          .filter(r => r.type === 'preventive' || r.type === 'corrective')
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        const latestManto = maintenanceReports[0];
+        
+        // Find latest calibration
+        const calibrationReports = reports
+          .filter(r => r.type === 'calibration')
+          .sort((a, b) => {
+            const dateA = new Date(a.calibrationDate || a.date).getTime();
+            const dateB = new Date(b.calibrationDate || b.date).getTime();
+            return dateB - dateA;
+          });
+        const latestCalib = calibrationReports[0];
+
+        const needsMantoSync = latestManto && latestManto.date !== equipment.lastMaintenance;
+        const latestCalibDate = latestCalib ? (latestCalib.calibrationDate || latestCalib.date) : null;
+        const needsCalibSync = latestCalib && latestCalibDate !== equipment.lastCalibration;
+
+        if (needsMantoSync || needsCalibSync) {
+          console.log('Auto-sync: Detected date desync. Syncing...', {
+            manto: { latest: latestManto?.date, current: equipment.lastMaintenance },
+            calib: { latest: latestCalibDate, current: equipment.lastCalibration }
+          });
+          await syncEquipmentWithHistory(equipment, reports);
+        }
+      }
+    };
+    
+    checkSync();
+  }, [reports, equipment?.id, equipment?.lastMaintenance, equipment?.lastCalibration]);
+  // --- END AUTO-SYNC ---
 
   if (loading) {
     return (

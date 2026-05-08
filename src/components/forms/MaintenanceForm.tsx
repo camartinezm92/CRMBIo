@@ -30,8 +30,9 @@ import { collection, addDoc, serverTimestamp, getDocs, query, where, orderBy, li
 import { db } from '@/lib/firebase';
 import { Equipment, MaintenanceReport, SparePart, VerificationItem } from '@/types';
 import { useAuth } from '@/lib/AuthContext';
+import { syncEquipmentWithHistory } from '@/lib/sync-logic';
 
-import { projectScheduleMonths } from '@/lib/schedule-utils';
+import { projectScheduleMonths, calculateNextMaintenance, isMoreRecent } from '@/lib/schedule-utils';
 
 interface MaintenanceFormProps {
   equipment: Equipment;
@@ -195,14 +196,31 @@ export default function MaintenanceForm({ equipment, onCancel, onSuccess, initia
         pauseDuration = formatDuration(equipment.pauseStartDate, now);
       }
 
-      let reportData: any = {
+      const reportData: any = {
         ...formData,
+        equipmentId: equipment.id,
+        equipmentName: equipment.name,
+        type: formData.type || 'preventive',
+        date: formData.date || new Date().toISOString().split('T')[0],
+        reportNumber: formData.reportNumber || `MT-${Math.floor(100000 + Math.random() * 900000)}`,
+        technicianId: user?.uid,
         spareParts,
         verificationItems,
-        ...(pauseDuration !== undefined && { pauseDuration }),
         deliveredBySignature: getSignatureData(deliverySigRef),
         receivedBySignature: getSignatureData(receptionSigRef),
       };
+      
+      if (equipment.status === 'paused' && equipment.pauseStartDate) {
+        const start = new Date(equipment.pauseStartDate);
+        const end = now;
+        const diffMs = end.getTime() - start.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        reportData.pauseDuration = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+        reportData.pauseStartDate = equipment.pauseStartDate;
+        reportData.pauseEndDate = now.toISOString();
+      }
 
       // 1. Generar el PDF en Memoria (Base64) usando pdfGenerator.ts
       try {
@@ -269,30 +287,18 @@ export default function MaintenanceForm({ equipment, onCancel, onSuccess, initia
         console.error('No se pudo subir a drive automáticamente:', pdfErr);
       }
 
-      reportData.createdAt = serverTimestamp();
-      await addDoc(collection(db, 'reports'), reportData);
-
-      // Auto update next maintenance and schedule months
-      const lastMaintenance = now.toISOString().split('T')[0];
-      let nextMaintenance = equipment.nextMaintenance;
-      if (equipment.maintenanceFrequency) {
-        const nextDate = new Date(now);
-        nextDate.setMonth(nextDate.getMonth() + Number(equipment.maintenanceFrequency));
-        nextMaintenance = nextDate.toISOString().split('T')[0];
-      }
-
-      const currentYear = new Date().getFullYear();
-      const scheduledMaintenanceMonths = projectScheduleMonths(nextMaintenance || lastMaintenance, equipment.maintenanceFrequency, currentYear);
-
-      // Update equipment record
-      await updateDoc(doc(db, 'equipment', equipment.id), {
-        status: 'active',
-        pauseStartDate: null,
-        lastMaintenance,
-        nextMaintenance,
-        scheduledMaintenanceMonths,
-        updatedAt: serverTimestamp()
+      await addDoc(collection(db, 'reports'), {
+        ...reportData,
+        createdAt: serverTimestamp()
       });
+
+      // --- CENTRALIZED SYNC ---
+      // Fetch all reports to get a full picture and sync the equipment
+      const q = query(collection(db, 'reports'), where('equipmentId', '==', equipment.id));
+      const reportsSnap = await getDocs(q);
+      const allReports = reportsSnap.docs.map(d => ({ ...d.data(), id: d.id })) as MaintenanceReport[];
+      await syncEquipmentWithHistory(equipment, allReports);
+      // --- END CENTRALIZED SYNC ---
 
       setSuccess(true);
       setTimeout(() => {

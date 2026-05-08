@@ -38,3 +38,21 @@ export const projectScheduleMonths = (
 
   return targetArray.sort((a, b) => a - b);
 };
+
+export const calculateNextMaintenance = (lastDateStr: string, frequencyMonths: number): string => {
+  if (!lastDateStr || !frequencyMonths) return lastDateStr;
+  
+  // Use T12:00:00Z to avoid date shifts due to timezone
+  const date = new Date(`${lastDateStr}T12:00:00Z`);
+  if (isNaN(date.getTime())) return lastDateStr;
+  
+  date.setMonth(date.getMonth() + frequencyMonths);
+  return date.toISOString().split('T')[0];
+};
+
+export const isMoreRecent = (newDateStr: string, currentDateStr?: string): boolean => {
+  if (!currentDateStr) return true;
+  const newDate = new Date(`${newDateStr}T12:00:00Z`);
+  const currentDate = new Date(`${currentDateStr}T12:00:00Z`);
+  return newDate >= currentDate;
+};

@@ -955,3 +955,188 @@ export const generateCompliancePDF = (submission: ComplianceSubmission, returnBa
     doc.save(`Chequeo_${submission.serviceName}_${format(new Date(submission.date), 'yyyy-MM-dd')}.pdf`);
   }
 };
+
+export const generateGOServicePDF = (data: any, returnBase64?: boolean) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 10;
+  const contentWidth = pageWidth - (margin * 2);
+  
+  // Header with custom layout - Professional and clear
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(38);
+  doc.text('GO', margin + 5, margin + 18);
+  doc.setLineWidth(0.7);
+  doc.line(margin + 28, margin + 5, margin + 28, margin + 23);
+  
+  doc.setFontSize(20);
+  doc.text('SERVITECNICO SAS', margin + 33, margin + 11);
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('RUT. 79.147.475-4 | CHIA, CUNDINAMARCA', margin + 33, margin + 16);
+  doc.text('TELÉFONO CEL.: 300 311 0571', margin + 33, margin + 21);
+  
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VENTA - REPARACION - MANTENIMIENTO - CALIBRACION', pageWidth - margin, margin + 10, { align: 'right' });
+  doc.text('EQUIPOS BIOMEDICOS E INDUSTRIALES', pageWidth - margin, margin + 16, { align: 'right' });
+
+  // TABLE: INFORMACION CLIENTE
+  autoTable(doc, {
+    startY: margin + 28,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+    head: [['INFORMACION CLIENTE']],
+    body: [
+      [
+        {
+          content: `NOMBRE CLIENTE: ${data.clienteNombre}\nDIRECCIÓN: ${data.clienteDireccion}\nCIUDAD: ${data.clienteCiudad}\nENCARGADO: ${data.clienteEncargado}`,
+          styles: { cellWidth: contentWidth / 2 }
+        },
+        {
+          content: `CARGO: ${data.clienteCargo}\nFECHA SOLICITUD: ${data.fechaSolicitud}\nTELÉFONO: ${data.clienteTelefono}`,
+          styles: { cellWidth: contentWidth / 2 }
+        }
+      ]
+    ]
+  });
+
+  // TABLE: INFORMACION EQUIPO
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 3,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+    head: [['INFORMACION EQUIPO']],
+    body: [
+      [
+        {
+          content: `EQUIPO: ${data.equipoNombre}\nMARCA: ${data.equipoMarca}\nMODELO: ${data.equipoModelo}`,
+          styles: { cellWidth: contentWidth / 2 }
+        },
+        {
+          content: `SERIAL: ${data.equipoSerial}\nHORAS FUNC.: ${data.equipoHoras || 'N/A'}\nUBICACIÓN: ${data.equipoUbicacion}`,
+          styles: { cellWidth: contentWidth / 2 }
+        }
+      ]
+    ]
+  });
+
+  // TIPO DE SERVICIO
+  const svc = data.tipoServicio;
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 3,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2.5, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+    head: [['TIPO DE SERVICIO']],
+    body: [
+      [
+        { content: `${svc.predictivo ? '[X]' : '[ ]'} Manto. Predictivo       ${svc.preventivo ? '[X]' : '[ ]'} Manto. Preventivo       ${svc.corrective ? '[X]' : '[ ]'} Manto. Correctivo       ${svc.reparacion ? '[X]' : '[ ]'} Daño Reporte`, styles: { halign: 'center' } }
+      ],
+      [
+        { content: `FECHA SERVICIO: ${data.fechaServicio}`, styles: { halign: 'right', fontStyle: 'bold' } }
+      ]
+    ]
+  });
+
+  // ACTIVIDADES REALIZADAS
+  const act = data.actividades;
+  const activitiesBody = [
+    [`[${act.limpieza ? 'X' : ' '}] Limpieza`, `[${act.revisionParteElectrica ? 'X' : ' '}] Revisión Parte Eléctrica`],
+    [`[${act.pruebaInicio ? 'X' : ' '}] Prueba de Inicio`, `[${act.revisionFuentes ? 'X' : ' '}] Revisión fuentes eléctricas`],
+    [`[${act.revisionEstructural ? 'X' : ' '}] Revisión Estructural`, `[${act.medicionVoltaje ? 'X' : ' '}] Medición de Voltaje`],
+    [`[${act.revisionFugas ? 'X' : ' '}] Revisión de Fugas`, `[${act.lubricacion ? 'X' : ' '}] Lubricación`],
+    [`[${act.revisionHidraulica ? 'X' : ' '}] Revisión Hidráulica`, `[${act.calibracion ? 'X' : ' '}] Calibración`],
+    [`[${act.revisionMecanica ? 'X' : ' '}] Revisión Mecánica`, `[${act.testFuncionamiento ? 'X' : ' '}] Test de funcionamiento`],
+  ];
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 3,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 1.5, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+    head: [['ACTIVIDADES REALIZADAS']],
+    body: activitiesBody
+  });
+
+  // PROCESO REALIZADO Y OBSERVACIONES
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 3,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2.5, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+    head: [['PROCESO REALIZADO Y OBSERVACIONES']],
+    body: [
+      [{ content: data.observaciones || 'Se realiza mantenimiento preventivo según protocolo del fabricante, verificando estado físico, limpieza interna y externa, ajustes mecánicos y pruebas de funcionamiento.', styles: { minCellHeight: 35 } }]
+    ]
+  });
+
+  // CONCLUSIONES
+  const con = data.conclusiones;
+  const conclusionsBody = [
+    ['El servicio concluye satisfactoriamente', con.satisfactorio ? 'SI [X] NO [ ]' : 'SI [ ] NO [X]'],
+    ['El equipo se entrega dentro de los parámetros requeridos', con.dentroParametros ? 'SI [X] NO [ ]' : 'SI [ ] NO [X]'],
+    ['El equipo queda fuera de servicio', con.fueraServicio ? 'SI [X] NO [ ]' : 'SI [ ] NO [X]'],
+    ['El equipo requiere ser retirado para evaluación en laboratorio', con.retiroLaboratorio ? 'SI [X] NO [ ]' : 'SI [ ] NO [X]'],
+    ['El equipo requiere cotización de repuestos', con.cotizacionRepuestos ? 'SI [X] NO [ ]' : 'SI [ ] NO [X]'],
+  ];
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 3,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 1.2, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    columnStyles: { 1: { halign: 'center', fontStyle: 'bold', cellWidth: 35 } },
+    body: conclusionsBody
+  });
+
+  // FOOTER / SIGNATURES
+  const footerY = (doc as any).lastAutoTable.finalY + 5;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ENTREGA DE SERVICIO', pageWidth / 2, footerY, { align: 'center' });
+  
+  const boxWidth = contentWidth / 3;
+  const boxHeight = 28; // Reduced height to fit
+  
+  doc.rect(margin, footerY + 2, boxWidth, boxHeight);
+  doc.rect(margin + boxWidth, footerY + 2, boxWidth, boxHeight);
+  doc.rect(margin + (2 * boxWidth), footerY + 2, boxWidth, boxHeight);
+
+  doc.setFontSize(7.5);
+  doc.text('Servicio prestado por técnico:', margin + 2, footerY + 6);
+  doc.text('FECHA FINALIZACIÓN:', margin + boxWidth + 2, footerY + 6);
+  
+  doc.setFontSize(10);
+  doc.text(data.fechaFinalizacion || '', margin + boxWidth + (boxWidth / 2), footerY + 20, { align: 'center' });
+  
+  doc.setFontSize(7.5);
+  doc.text('Recibido conforme:', margin + (2 * boxWidth) + 2, footerY + 6);
+
+  // Signatures - centered and scaled
+  if (data.tecnicoFirma) {
+    doc.addImage(data.tecnicoFirma, 'PNG', margin + 2, footerY + 7, boxWidth - 4, boxHeight - 8);
+  }
+  
+  if (data.recibidoFirma) {
+    doc.addImage(data.recibidoFirma, 'PNG', margin + (2 * boxWidth) + 2, footerY + 7, boxWidth - 4, boxHeight - 8);
+  }
+
+  // Names under signatures
+  doc.setFontSize(7.5);
+  doc.text(`Nombre: ${data.tecnicoNombre || 'GO SERVITECNICO SAS'}`, margin + 2, footerY + boxHeight + 6);
+  doc.text(`Nombre: ${data.recibidoNombre || ''}`, margin + (2 * boxWidth) + 2, footerY + boxHeight + 6);
+  doc.text(`Cargo: ${data.recibidoCargo || ''}`, margin + (2 * boxWidth) + 2, footerY + boxHeight + 10);
+
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text('CHIA: CARRERA 1C No. 13 - 10 | CEL.: 300 311 0571', pageWidth / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+  // Removed GOS-TEC-001 text as requested
+
+  if (returnBase64) {
+    return doc.output('datauristring');
+  } else {
+    doc.save(`GOS_Reporte_${data.equipoSerial}_${data.fechaServicio}.pdf`);
+  }
+};

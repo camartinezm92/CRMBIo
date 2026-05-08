@@ -1,56 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { FileUp, X, CheckCircle2, Loader2, Info } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { FileUp, X, CheckCircle2, Loader2, Info, Building2 } from 'lucide-react';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDocs, query, where } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { Equipment, MaintenanceReport } from '@/types';
 import { cn } from '@/lib/utils';
+import { calculateNextMaintenance, isMoreRecent, projectScheduleMonths } from '@/lib/schedule-utils';
 import { syncEquipmentWithHistory } from '@/lib/sync-logic';
 
-import { projectScheduleMonths, isMoreRecent } from '@/lib/schedule-utils';
-
-interface CalibrationFormProps {
+interface ExternalMaintenanceFormProps {
   equipment: Equipment;
   onCancel: () => void;
   onSuccess?: () => void;
 }
 
-export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationFormProps) {
+export function ExternalMaintenanceForm({ equipment, onCancel, onSuccess }: ExternalMaintenanceFormProps) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   
-  // Calculate next calibration date if frequency exists
-  const getDefaultNextDate = (currentDate: string) => {
-    if (!equipment.calibrationFrequency || isNaN(Number(equipment.calibrationFrequency))) return '';
-    const date = new Date(currentDate);
-    date.setMonth(date.getMonth() + Number(equipment.calibrationFrequency));
-    return date.toISOString().split('T')[0];
-  };
-
   const today = new Date().toISOString().split('T')[0];
 
   const [formData, setFormData] = useState({
-    calibrationDate: today,
-    nextCalibrationDate: getDefaultNextDate(today),
+    date: today,
     provider: '',
     description: '',
-    attachmentUrl: '' // Just the file name for display
   });
 
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-
-  // Auto-update next date if calibration date changes
-  useEffect(() => {
-    if (formData.calibrationDate && equipment.calibrationFrequency) {
-      setFormData(prev => ({
-        ...prev,
-        nextCalibrationDate: getDefaultNextDate(formData.calibrationDate)
-      }));
-    }
-  }, [formData.calibrationDate]);
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -59,15 +38,15 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!attachmentFile) {
-      alert("Es obligatorio adjuntar el certificado de calibración.");
-      return;
-    }
-    
-    if (!formData.calibrationDate || !formData.nextCalibrationDate) {
-      alert("Las fechas de calibración son obligatorias.");
+      alert("Es obligatorio adjuntar el reporte de mantenimiento.");
       return;
     }
 
+    if (!formData.provider) {
+      alert("El nombre del proveedor es obligatorio.");
+      return;
+    }
+    
     setLoading(true);
     try {
       // 1. Convert File to Base64
@@ -84,7 +63,10 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
 
       const fileExtension = attachmentFile.name.split('.').pop() || 'pdf';
 
-      // 2. Upload to Drive under 'Calibraciones'
+      // 2. Upload to Drive under 'mantenimiento'
+      // Filename format: YYYY-MM-DD - [Provider Name].pdf
+      const fileName = `${formData.date} - ${formData.provider}.${fileExtension}`;
+
       const attachmentUploadRes = await fetch('/api/drive/upload-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,8 +74,8 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
           equipmentDirId: equipment.driveFolderId || '',
           equipmentSerial: equipment.serial,
           equipmentName: equipment.name,
-          folderType: 'calibration',
-          fileName: `${formData.calibrationDate} - ${equipment.serial}.${fileExtension}`,
+          folderType: 'preventive',
+          fileName: fileName,
           base64: attachmentBase64,
           mimeType: attachmentFile.type || 'application/pdf'
         })
@@ -106,11 +88,7 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
         }
       }
 
-      if (!finalDriveUrl) {
-         console.warn("No se obtuvo webViewLink tras subir al drive.");
-      }
-
-      // 3. Create Report Record (Type: Calibration)
+      // 3. Create Report Record (Type: preventive - External)
       const reportData = {
         equipmentId: equipment.id,
         equipmentName: equipment.name,
@@ -118,39 +96,25 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
         equipmentModel: equipment.model,
         equipmentSerial: equipment.serial,
         technicianId: auth.currentUser?.uid || 'system',
-        technicianName: auth.currentUser?.displayName || auth.currentUser?.email || 'Técnico',
-        date: formData.calibrationDate,
+        technicianName: auth.currentUser?.displayName || auth.currentUser?.email || 'Técnico Externo',
+        date: formData.date,
         status: 'completed',
-        type: 'calibration',
-        calibrationDate: formData.calibrationDate,
-        nextCalibrationDate: formData.nextCalibrationDate,
+        type: 'preventive',
+        isExternal: true,
         provider: formData.provider,
-        description: formData.description || 'Calibración realizada y certificado adjunto.',
+        description: formData.description || `Mantenimiento preventivo realizado por ${formData.provider}. Reporte adjunto.`,
         createdAt: serverTimestamp(),
-        driveFileUrl: finalDriveUrl // This is the important part! We save the PDF link as the main report link
+        driveFileUrl: finalDriveUrl,
+        reportNumber: `EXT-${Date.now().toString().slice(-6)}`
       };
 
       await addDoc(collection(db, 'reports'), reportData);
       
-      // Force sync after adding calibration report
+      // Force sync after adding external report
       const q = query(collection(db, 'reports'), where('equipmentId', '==', equipment.id));
       const reportsSnap = await getDocs(q);
       const allReports = reportsSnap.docs.map(d => ({ ...d.data(), id: d.id })) as MaintenanceReport[];
       await syncEquipmentWithHistory(equipment, allReports);
-
-       // 5. Sync Sheets
-       try {
-        await fetch('/api/equipment/sync-sheets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            equipment: { ...equipment, lastCalibration: formData.calibrationDate, nextCalibration: formData.nextCalibrationDate },
-            actionReason: `Actualización de Calibración: ${formData.calibrationDate}`
-          })
-        });
-      } catch (e) {
-        console.error('Error sincronizando Sheets:', e);
-      }
 
       setSuccess(true);
       setTimeout(() => {
@@ -159,8 +123,8 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
       }, 2000);
 
     } catch (error) {
-      console.error('Error saving calibration:', error);
-      alert('Hubo un error al guardar la calibración.');
+      console.error('Error saving external maintenance:', error);
+      alert('Hubo un error al guardar el reporte externo.');
     } finally {
       setLoading(false);
     }
@@ -168,27 +132,27 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
 
   if (success) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-sky-100 shadow-xl animate-in zoom-in-95 duration-500">
-        <div className="h-24 w-24 bg-sky-100 rounded-full flex items-center justify-center mb-6">
-          <CheckCircle2 className="h-12 w-12 text-sky-500" />
+      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-indigo-100 shadow-xl animate-in zoom-in-95 duration-500">
+        <div className="h-24 w-24 bg-indigo-100 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle2 className="h-12 w-12 text-indigo-500" />
         </div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2">¡Calibración Registrada!</h2>
-        <p className="text-slate-500 text-center max-w-md">El certificado ha sido anexado exitosamente y las fechas del equipo han sido actualizadas.</p>
+        <h2 className="text-2xl font-black text-slate-900 mb-2">¡Reporte Registrado!</h2>
+        <p className="text-slate-500 text-center max-w-md">El mantenimiento externo ha sido anexado exitosamente a la hoja de vida del equipo.</p>
       </div>
     );
   }
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto my-8">
-      <div className="bg-sky-500 p-6 flex justify-between items-center text-white">
+      <div className="bg-indigo-600 p-6 flex justify-between items-center text-white">
         <div>
           <h2 className="text-2xl font-black flex items-center gap-2">
-            Registro de Calibración
+            Mantenimiento por Tercero
             <Badge className="bg-white/20 hover:bg-white/30 text-white rounded-lg border-none shadow-none uppercase tracking-widest text-[10px]">
               {equipment.serial}
             </Badge>
           </h2>
-          <p className="text-sky-100 font-medium opacity-90 mt-1">Anexe el certificado oficial del proveedor</p>
+          <p className="text-indigo-100 font-medium opacity-90 mt-1">Anexe el informe técnico entregado por el proveedor externo</p>
         </div>
         <Button variant="ghost" size="icon" onClick={onCancel} className="text-white hover:bg-white/20 rounded-full h-10 w-10">
           <X className="h-5 w-5" />
@@ -197,59 +161,48 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
 
       <form onSubmit={handleSubmit} className="p-8 space-y-8">
         
-        {/* Important Info Card */}
         <div className="bg-slate-50 p-4 pt-4 rounded-2xl flex items-start gap-4 border border-slate-100">
-             <Info className="h-5 w-5 text-sky-500 shrink-0 mt-0.5" />
+             <Info className="h-5 w-5 text-indigo-500 shrink-0 mt-0.5" />
              <div className="space-y-1">
-                 <p className="text-sm font-bold text-slate-900">Sobre las calibraciones</p>
+                 <p className="text-sm font-bold text-slate-900">Sobre reportes externos</p>
                  <p className="text-xs text-slate-500 leading-relaxed">
-                     Este módulo no genera un reporte en PDF. Usted debe subir el certificado provisto por el proveedor o el metrólogo. 
-                     El archivo quedará guardado directamente en la carpeta del equipo dentro de Google Drive.
+                     Utilice esta opción cuando el mantenimiento fue realizado por un proveedor fuera de la organización. 
+                     El archivo PDF se guardará en la carpeta "Reportes / Mantenimientos" del equipo.
                  </p>
              </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">FECHA DE CALIBRACIÓN REALIZADA</Label>
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">FECHA DEL SERVICIO</Label>
             <Input 
               type="date" 
               required
-              value={formData.calibrationDate} 
-              onChange={(e) => handleChange('calibrationDate', e.target.value)} 
+              value={formData.date} 
+              onChange={(e) => handleChange('date', e.target.value)} 
               className="h-12 bg-slate-50 border-slate-200 rounded-xl px-4 font-medium"
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between">
-              PRÓXIMA CALIBRACIÓN SUGERIDA
-              {equipment.calibrationFrequency && <span className="text-sky-500 ml-2">(Frecuencia: {equipment.calibrationFrequency} meses)</span>}
-            </Label>
-            <Input 
-              type="date" 
-              required
-              value={formData.nextCalibrationDate} 
-              onChange={(e) => handleChange('nextCalibrationDate', e.target.value)} 
-              className="h-12 bg-slate-50 border-slate-200 rounded-xl px-4 font-medium"
-            />
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">EMPRESA / PROVEEDOR</Label>
+            <div className="relative">
+              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input 
+                required
+                placeholder="Ej. Biomedical Group"
+                value={formData.provider} 
+                onChange={(e) => handleChange('provider', e.target.value)} 
+                className="h-12 bg-slate-50 border-slate-200 rounded-xl pl-12 pr-4 font-medium"
+              />
+            </div>
           </div>
         </div>
 
         <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">PROVEEDOR / EMPRESA CALIBRADORA (OPCIONAL)</Label>
-            <Input 
-              placeholder="Ej. Metrología SAS"
-              value={formData.provider} 
-              onChange={(e) => handleChange('provider', e.target.value)} 
-              className="h-12 bg-slate-50 border-slate-200 rounded-xl px-4 font-medium"
-            />
-        </div>
-
-        <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">SUBIR CERTIFICADO PDF *</Label>
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">SUBIR REPORTE (PDF / IMAGEN) *</Label>
             <div className={cn(
               "flex items-center gap-4 p-4 border-2 border-dashed rounded-2xl transition-colors bg-slate-50",
-              attachmentFile ? "border-emerald-500 bg-emerald-50/50" : "border-slate-300 hover:border-slate-400 focus-within:border-sky-500"
+              attachmentFile ? "border-emerald-500 bg-emerald-50/50" : "border-slate-300 hover:border-slate-400 focus-within:border-indigo-500"
             )}>
               <div className={cn(
                 "h-12 w-12 rounded-xl flex items-center justify-center shrink-0",
@@ -268,7 +221,7 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
               <input 
                  type="file" 
                  className="hidden" 
-                 id="cert-upload" 
+                 id="manto-upload" 
                  accept="application/pdf,image/*" 
                  onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -282,7 +235,7 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
                   attachmentFile ? "text-emerald-700 hover:text-emerald-800 hover:bg-emerald-200/50" : "bg-white"
                 )}
                 type="button" 
-                onClick={() => document.getElementById('cert-upload')?.click()}
+                onClick={() => document.getElementById('manto-upload')?.click()}
               >
                 {attachmentFile ? 'Cambiar Archivo' : 'Examinar...'}
               </Button>
@@ -290,9 +243,9 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
         </div>
 
         <div className="space-y-2">
-          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">OBSERVACIONES ADICIONALES</Label>
+          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">OBSERVACIONES DEL PROVEEDOR</Label>
           <Textarea 
-            placeholder="Resultados relevantes o anotaciones sobre el proceso..." 
+            placeholder="Resumen de actividades o repuestos cambiados por el tercero..." 
             value={formData.description}
             onChange={(e) => handleChange('description', e.target.value)}
             className="min-h-[100px] rounded-2xl border-slate-200 bg-slate-50 p-4"
@@ -303,14 +256,14 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
           <Button type="button" variant="ghost" onClick={onCancel} className="rounded-xl font-bold text-slate-500 h-12 px-6">
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading} className="rounded-xl font-bold bg-sky-500 hover:bg-sky-600 text-white h-12 px-8 shadow-lg shadow-sky-200 transition-all hover:scale-[1.02]">
+          <Button type="submit" disabled={loading} className="rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white h-12 px-8 shadow-lg shadow-indigo-200 transition-all hover:scale-[1.02]">
             {loading ? (
                <>
                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                  Subiendo al Drive...
                </>
             ) : (
-               'Guardar Certificado'
+               'Guardar Reporte Externo'
             )}
           </Button>
         </div>
@@ -319,7 +272,6 @@ export function CalibrationForm({ equipment, onCancel, onSuccess }: CalibrationF
   );
 }
 
-// Needed mock for Badge inside this file
 const Badge = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
   <div ref={ref} className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2", className)} {...props} />
 ))

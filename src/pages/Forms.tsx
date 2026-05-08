@@ -16,7 +16,9 @@ import {
   ShieldCheck,
   Search,
   Loader2,
-  ArrowLeft
+  ArrowLeft,
+  Settings2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { collection, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -24,6 +26,8 @@ import { Equipment, Service } from '@/types';
 import EquipmentForm from '@/components/forms/EquipmentForm';
 import MaintenanceForm from '@/components/forms/MaintenanceForm';
 import { CalibrationForm } from '@/components/forms/CalibrationForm';
+import { ExternalMaintenanceForm } from '@/components/forms/ExternalMaintenanceForm';
+import GOServiceForm from '@/components/forms/GOServiceForm';
 import {
   Dialog,
   DialogContent,
@@ -34,14 +38,16 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-type FormType = 'equipment' | 'service' | 'preventive' | 'corrective' | 'calibration' | null;
+type FormType = 'equipment' | 'service' | 'preventive' | 'corrective' | 'calibration' | 'go_service' | null;
 
 export default function Forms() {
   const [activeForm, setActiveForm] = React.useState<FormType>(null);
+  const [showExtraForms, setShowExtraForms] = React.useState(false);
   const [equipmentList, setEquipmentList] = React.useState<Equipment[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedEquipment, setSelectedEquipment] = React.useState<Equipment | null>(null);
+  const [maintenanceMode, setMaintenanceMode] = React.useState<'manual' | 'external' | null>(null);
   const [newServiceName, setNewServiceName] = React.useState('');
   const [savingService, setSavingService] = React.useState(false);
 
@@ -154,17 +160,111 @@ export default function Forms() {
     );
   }
 
-  if ((activeForm === 'preventive' || activeForm === 'corrective') && selectedEquipment) {
+  if (activeForm === 'go_service' && selectedEquipment) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
         <Button variant="ghost" onClick={() => setSelectedEquipment(null)} className="rounded-xl">
           <ArrowLeft className="mr-2 h-4 w-4" /> Cambiar Equipo
+        </Button>
+        <GOServiceForm 
+          equipment={selectedEquipment} 
+          onCancel={() => {
+            setSelectedEquipment(null);
+            setActiveForm(null);
+          }} 
+          onSuccess={() => {
+            setSelectedEquipment(null);
+            setActiveForm(null);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if ((activeForm === 'preventive' || activeForm === 'corrective') && selectedEquipment) {
+    if (activeForm === 'preventive' && !maintenanceMode) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in fade-in zoom-in-95 duration-500">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-black text-slate-900">Tipo de Registro</h2>
+            <p className="text-slate-500 font-medium tracking-tight italic">
+              Indique cómo desea registrar el mantenimiento para: <span className="text-indigo-600 not-italic font-bold">{selectedEquipment.name}</span>
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl px-4">
+             <Card 
+               className="p-8 cursor-pointer hover:bg-slate-50 border-2 border-transparent hover:border-primary/20 transition-all rounded-3xl group shadow-sm flex flex-col items-center text-center space-y-4"
+               onClick={() => setMaintenanceMode('manual')}
+             >
+               <div className="p-4 bg-primary/10 rounded-2xl group-hover:scale-110 transition-transform">
+                 <ClipboardCheck className="h-10 w-10 text-primary" />
+               </div>
+               <div>
+                 <h4 className="text-xl font-black text-slate-900">Formato Digital</h4>
+                 <p className="text-sm text-slate-500 font-medium mt-2 leading-relaxed">
+                   Diligencie el formulario institucional paso a paso y genere el PDF automático.
+                 </p>
+               </div>
+               <Button className="rounded-xl w-full font-bold">Diligenciar Manual</Button>
+             </Card>
+
+             <Card 
+               className="p-8 cursor-pointer hover:bg-slate-50 border-2 border-transparent hover:border-indigo-200 transition-all rounded-3xl group shadow-sm flex flex-col items-center text-center space-y-4"
+               onClick={() => setMaintenanceMode('external')}
+             >
+               <div className="p-4 bg-indigo-100 rounded-2xl group-hover:scale-110 transition-transform">
+                 <FileSpreadsheet className="h-10 w-10 text-indigo-600" />
+               </div>
+               <div>
+                 <h4 className="text-xl font-black text-indigo-900">Reporte Externo</h4>
+                 <p className="text-sm text-slate-500 font-medium mt-2 leading-relaxed">
+                   Suba un archivo PDF entregado por un proveedor o tercero externo.
+                 </p>
+               </div>
+               <Button variant="outline" className="rounded-xl w-full font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50">Adjuntar Informe</Button>
+             </Card>
+          </div>
+
+          <Button variant="ghost" onClick={() => setSelectedEquipment(null)} className="rounded-xl font-bold">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Cancelar y volver
+          </Button>
+        </div>
+      );
+    }
+
+    if (activeForm === 'preventive' && maintenanceMode === 'external') {
+      return (
+        <div className="space-y-6 animate-in fade-in duration-500">
+          <Button variant="ghost" onClick={() => setMaintenanceMode(null)} className="rounded-xl">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Volver a selección de tipo
+          </Button>
+          <ExternalMaintenanceForm 
+            equipment={selectedEquipment} 
+            onCancel={() => {
+              setSelectedEquipment(null);
+              setMaintenanceMode(null);
+              setActiveForm(null);
+            }} 
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <Button variant="ghost" onClick={() => {
+          if (activeForm === 'preventive') setMaintenanceMode(null);
+          else setSelectedEquipment(null);
+        }} className="rounded-xl">
+          <ArrowLeft className="mr-2 h-4 w-4" /> {activeForm === 'preventive' ? 'Volver a selección de tipo' : 'Cambiar Equipo'}
         </Button>
         <MaintenanceForm 
           equipment={selectedEquipment} 
           initialType={activeForm}
           onCancel={() => {
             setSelectedEquipment(null);
+            setMaintenanceMode(null);
             setActiveForm(null);
           }} 
         />
@@ -176,9 +276,17 @@ export default function Forms() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
         <h1 className="text-4xl font-black tracking-tight text-slate-900">Formatos y Acciones</h1>
-        <p className="text-lg text-slate-500 mt-2 font-medium">
-          Centro de creación de registros y reportes técnicos.
-        </p>
+        <div className="flex items-center gap-3 mt-2">
+          <p className="text-lg text-slate-500 font-medium">
+            Centro de creación de registros y reportes técnicos.
+          </p>
+          <button 
+            onClick={() => setShowExtraForms(true)} 
+            className="text-primary text-sm font-bold hover:underline bg-primary/5 px-2 py-1 rounded-lg"
+          >
+            más...
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -209,7 +317,7 @@ export default function Forms() {
 
       {/* Equipment Selection Dialog for Maintenance */}
       <Dialog 
-        open={(activeForm === 'preventive' || activeForm === 'corrective' || activeForm === 'calibration') && !selectedEquipment} 
+        open={(activeForm === 'preventive' || activeForm === 'corrective' || activeForm === 'calibration' || activeForm === 'go_service') && !selectedEquipment} 
         onOpenChange={(open) => !open && setActiveForm(null)}
       >
         <DialogContent className="max-w-2xl rounded-3xl">
@@ -293,6 +401,56 @@ export default function Forms() {
                 Crear Servicio
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Extra Forms Selection */}
+      <Dialog open={showExtraForms} onOpenChange={setShowExtraForms}>
+        <DialogContent className="max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">Formatos Externos y Especiales</DialogTitle>
+            <DialogDescription className="font-medium text-slate-500">
+              Formatos de terceros o registros técnicos no estandarizados institucionalmente.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
+            <Card 
+              className="p-6 cursor-pointer hover:bg-slate-50 border-2 border-transparent hover:border-primary/20 transition-all rounded-2xl group shadow-sm"
+              onClick={() => {
+                setActiveForm('go_service');
+                setShowExtraForms(false);
+              }}
+            >
+              <div className="flex items-center gap-4 mb-3">
+                <div className="p-3 bg-indigo-100 rounded-xl group-hover:scale-110 transition-transform">
+                  <FileSpreadsheet className="h-6 w-6 text-indigo-600" />
+                </div>
+                <h4 className="font-black text-slate-900 leading-tight">GO SERVITECNICO SAS</h4>
+              </div>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Formato externo para reportes de mantenimiento y calibración de terceros (GOS-TEC-001).
+              </p>
+            </Card>
+
+            <Card 
+              className="p-6 cursor-pointer hover:bg-slate-50 border-2 border-transparent hover:border-slate-200 transition-all rounded-2xl group opacity-50 shadow-sm"
+            >
+              <div className="flex items-center gap-4 mb-3">
+                <div className="p-3 bg-slate-100 rounded-xl">
+                  <Settings2 className="h-6 w-6 text-slate-400" />
+                </div>
+                <h4 className="font-black text-slate-400">Otros Formatos</h4>
+              </div>
+              <p className="text-xs text-slate-400 font-medium">
+                Próximamente más formatos integrados.
+              </p>
+            </Card>
+          </div>
+
+          <div className="flex justify-end">
+             <Button variant="ghost" onClick={() => setShowExtraForms(false)} className="rounded-xl font-bold">Cerrar</Button>
           </div>
         </DialogContent>
       </Dialog>
