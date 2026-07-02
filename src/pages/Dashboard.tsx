@@ -79,18 +79,24 @@ export default function Dashboard() {
         return diffDays < 7;
       });
       setPendingMaintenance(pendingManto);
+    }, (error) => {
+      console.warn("Dashboard equipment snapshot error:", error);
     });
 
     // 2. Real-time services
     const unsubServices = onSnapshot(collection(db, 'services'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Service[];
       setServices(data);
+    }, (error) => {
+      console.warn("Dashboard services snapshot error:", error);
     });
 
     // 3. Real-time checklist submissions
     const unsubSubs = onSnapshot(collection(db, 'compliance_submissions'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data() })) as ComplianceSubmission[];
       setSubmissions(data);
+    }, (error) => {
+      console.warn("Dashboard submissions snapshot error:", error);
     });
 
     // 4. Recent reports
@@ -102,6 +108,8 @@ export default function Dashboard() {
     const unsubReports = onSnapshot(qReports, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as MaintenanceReport[];
       setRecentReports(data);
+    }, (error) => {
+      console.warn("Dashboard reports snapshot error:", error);
     });
 
     return () => {
