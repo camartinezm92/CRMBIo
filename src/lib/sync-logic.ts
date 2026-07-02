@@ -59,7 +59,7 @@ export const syncEquipmentWithHistory = async (equipment: Equipment, reports: Ma
   // Update calibration fields
   if (latestCalib) {
     const calibDate = latestCalib.calibrationDate || latestCalib.date;
-    const nextCalib = latestCalib.nextCalibrationDate || latestCalib.nextCalibration;
+    const nextCalib = latestCalib.nextCalibrationDate || (latestCalib as any).nextCalibration;
     
     updatePayload.lastCalibration = calibDate;
     updatePayload.nextCalibration = nextCalib;
