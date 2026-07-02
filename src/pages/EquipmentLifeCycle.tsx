@@ -126,6 +126,8 @@ export default function EquipmentLifeCycle() {
       } else {
         setEquipment(null);
       }
+    }, (error) => {
+      console.warn("EquipmentLifeCycle equipment snapshot error:", error);
     });
 
     const qReports = query(collection(db, 'reports'), where('equipmentId', '==', id), orderBy('date', 'desc'));
@@ -137,6 +139,8 @@ export default function EquipmentLifeCycle() {
       setReports(data);
 
       // We handle sync in a separate effect or carefully here
+    }, (error) => {
+      console.warn("EquipmentLifeCycle reports snapshot error:", error);
     });
 
     const qTransfers = query(collection(db, 'transfers'), where('equipmentId', '==', id), orderBy('date', 'desc'));
@@ -146,6 +150,9 @@ export default function EquipmentLifeCycle() {
         id: doc.id
       })) as Transfer[];
       setTransfers(data);
+      setLoading(false);
+    }, (error) => {
+      console.warn("EquipmentLifeCycle transfers snapshot error:", error);
       setLoading(false);
     });
 
