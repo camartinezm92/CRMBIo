@@ -37,6 +37,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import SignatureCanvas from 'react-signature-canvas';
 import { 
   Wrench, 
   Plus, 
@@ -58,7 +59,9 @@ import {
   ExternalLink,
   ShieldAlert,
   Sliders,
-  Sparkles
+  Sparkles,
+  Eraser,
+  PenTool
 } from 'lucide-react';
 
 export default function MinorDevices() {
@@ -132,11 +135,27 @@ export default function MinorDevices() {
   const [physicalCounts, setPhysicalCounts] = React.useState<Record<string, number>>({});
   const [inventoryObservations, setInventoryObservations] = React.useState('');
   const [inventoryDate, setInventoryDate] = React.useState(new Date().toISOString().split('T')[0]);
+  const [performedByName, setPerformedByName] = React.useState('');
+  const [approvedByName, setApprovedByName] = React.useState('Coordinador de Servicio / Calidad');
   const [updateSystemStock, setUpdateSystemStock] = React.useState(true);
   const [savingInventory, setSavingInventory] = React.useState(false);
   const [pastInventories, setPastInventories] = React.useState<any[]>([]);
   const [loadingPastInventories, setLoadingPastInventories] = React.useState(false);
   const [selectedPastInventory, setSelectedPastInventory] = React.useState<any | null>(null);
+  const [inventoryToDelete, setInventoryToDelete] = React.useState<any | null>(null);
+
+  const inventoryPerformedSigRef = React.useRef<SignatureCanvas>(null);
+  const inventoryApprovedSigRef = React.useRef<SignatureCanvas>(null);
+
+  const getSignatureData = (ref: React.RefObject<SignatureCanvas>) => {
+    if (!ref.current || ref.current.isEmpty()) return '';
+    try {
+      return ref.current.getTrimmedCanvas().toDataURL('image/png');
+    } catch (e) {
+      console.warn('getTrimmedCanvas failed, falling back to raw canvas', e);
+      return ref.current.getCanvas().toDataURL('image/png');
+    }
+  };
 
   const fetchPastInventories = async () => {
     setLoadingPastInventories(true);
@@ -174,9 +193,16 @@ export default function MinorDevices() {
     setPhysicalCounts(initialCounts);
     setInventoryObservations('');
     setInventoryDate(new Date().toISOString().split('T')[0]);
+    setPerformedByName(user?.displayName || user?.email || 'Usuario');
+    setApprovedByName('Coordinador de Servicio / Calidad');
     setUpdateSystemStock(true);
     setInventoryActiveTab('perform');
     setShowInventoryModal(true);
+
+    setTimeout(() => {
+      if (inventoryPerformedSigRef.current) inventoryPerformedSigRef.current.clear();
+      if (inventoryApprovedSigRef.current) inventoryApprovedSigRef.current.clear();
+    }, 150);
   };
 
   const handleSaveInventory = async () => {
@@ -202,7 +228,10 @@ export default function MinorDevices() {
       const newInventory = {
         date: inventoryDate,
         performedBy: user?.uid || 'Unknown',
-        performedByName: user?.displayName || user?.email || 'Usuario',
+        performedByName: performedByName || user?.displayName || user?.email || 'Usuario',
+        performedBySignature: getSignatureData(inventoryPerformedSigRef),
+        approvedByName: approvedByName || 'Coordinador de Servicio / Calidad',
+        approvedBySignature: getSignatureData(inventoryApprovedSigRef),
         observations: inventoryObservations,
         items: inventoryItems,
         createdAt: new Date().toISOString()
@@ -227,6 +256,18 @@ export default function MinorDevices() {
       handleFirestoreError(err, OperationType.WRITE, 'minor_devices_inventories');
     } finally {
       setSavingInventory(false);
+    }
+  };
+
+  const handleDeleteInventory = async () => {
+    if (!inventoryToDelete) return;
+    try {
+      await deleteDoc(doc(db, 'minor_devices_inventories', inventoryToDelete.id));
+      setPastInventories(prev => prev.filter(inv => inv.id !== inventoryToDelete.id));
+      setInventoryToDelete(null);
+    } catch (err) {
+      console.error("Error deleting past inventory: ", err);
+      handleFirestoreError(err, OperationType.WRITE, 'minor_devices_inventories');
     }
   };
 
@@ -351,11 +392,26 @@ export default function MinorDevices() {
       }
     });
 
-    currentY = (doc as any).lastAutoTable.finalY + 15;
+    currentY = (doc as any).lastAutoTable.finalY + 20;
 
-    if (currentY > doc.internal.pageSize.getHeight() - 40) {
+    if (currentY > doc.internal.pageSize.getHeight() - 45) {
       doc.addPage();
-      currentY = margin + 15;
+      currentY = margin + 20;
+    }
+
+    if (inventory.performedBySignature) {
+      try {
+        doc.addImage(inventory.performedBySignature, 'PNG', margin + 25, currentY - 16, 40, 15);
+      } catch (e) {
+        console.error("Error drawing performedBySignature in PDF: ", e);
+      }
+    }
+    if (inventory.approvedBySignature) {
+      try {
+        doc.addImage(inventory.approvedBySignature, 'PNG', pageWidth - margin - 65, currentY - 16, 40, 15);
+      } catch (e) {
+        console.error("Error drawing approvedBySignature in PDF: ", e);
+      }
     }
 
     doc.line(margin + 15, currentY, margin + 75, currentY);
@@ -370,7 +426,7 @@ export default function MinorDevices() {
     doc.setFont('helvetica', 'bold');
     doc.text('REVISADO Y APROBADO POR', pageWidth - margin - 45, currentY + 4, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.text('Coordinador de Servicio / Calidad', pageWidth - margin - 45, currentY + 8, { align: 'center' });
+    doc.text(inventory.approvedByName || 'Coordinador de Servicio / Calidad', pageWidth - margin - 45, currentY + 8, { align: 'center' });
 
     doc.save(`Inventario_Instrumental_${inventory.date}.pdf`);
   };
@@ -1313,6 +1369,38 @@ export default function MinorDevices() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Inventory Confirmation Modal */}
+      <Dialog open={!!inventoryToDelete} onOpenChange={() => setInventoryToDelete(null)}>
+        <DialogContent className="max-w-md rounded-3xl p-8">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-slate-900 uppercase flex items-center gap-2">
+              <ShieldAlert className="h-6 w-6 text-rose-500 shrink-0" />
+              ¿Eliminar Inventario?
+            </DialogTitle>
+            <DialogDescription className="font-medium text-slate-500 pt-2">
+              Esta acción eliminará de forma irreversible el registro de inventario físico del{' '}
+              <span className="font-black text-slate-800">
+                {inventoryToDelete?.date ? inventoryToDelete.date.split('-').reverse().join('/') : ''}
+              </span>{' '}
+              realizado por <span className="font-bold text-slate-800">{inventoryToDelete?.performedByName}</span>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-3 mt-6">
+            <Button variant="ghost" className="rounded-xl font-bold h-11" onClick={() => setInventoryToDelete(null)}>
+              CANCELAR
+            </Button>
+            <Button 
+              variant="destructive" 
+              className="rounded-xl font-black h-11 px-6 text-white"
+              onClick={handleDeleteInventory}
+            >
+              ELIMINAR AHORA
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Register Report Modal */}
       <Dialog open={showAddReportModal} onOpenChange={(open) => !open && setShowAddReportModal(false)}>
         <DialogContent className="max-w-2xl rounded-[2.5rem] p-8 max-h-[90vh] overflow-y-auto">
@@ -1908,6 +1996,97 @@ export default function MinorDevices() {
                 </table>
               </div>
 
+              {/* Firmas de Responsables */}
+              <div className="space-y-4 pt-4 border-t border-slate-200">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <span className="bg-emerald-600 text-white h-5 w-5 rounded-full flex items-center justify-center">
+                    <PenTool className="h-3 w-3" />
+                  </span>
+                  Firmas de los Responsables
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Responsable de Inventario */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-3">
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider text-center border-b pb-1.5">
+                      RESPONSABLE DEL INVENTARIO
+                    </p>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Nombre Completo</Label>
+                        <Input 
+                          value={performedByName} 
+                          onChange={(e) => setPerformedByName(e.target.value)} 
+                          placeholder="Nombre de quien realiza el inventario"
+                          className="h-9 rounded-xl font-bold text-slate-800"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Firma Digital</Label>
+                        <div className="border-2 border-slate-100 rounded-xl bg-slate-50/50 overflow-hidden relative group">
+                          <SignatureCanvas 
+                            ref={inventoryPerformedSigRef}
+                            penColor="black"
+                            canvasProps={{ className: "w-full h-24 cursor-crosshair" }}
+                          />
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute top-2 right-2 rounded-full h-8 w-8 bg-white shadow-sm hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => inventoryPerformedSigRef.current?.clear()}
+                            type="button"
+                          >
+                            <Eraser className="h-4 w-4 text-slate-500" />
+                          </Button>
+                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none">
+                            <p className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">Dibuje su firma aquí</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Revisado y Aprobado por */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-100 space-y-3">
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider text-center border-b pb-1.5">
+                      REVISADO Y APROBADO POR
+                    </p>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Nombre / Cargo</Label>
+                        <Input 
+                          value={approvedByName} 
+                          onChange={(e) => setApprovedByName(e.target.value)} 
+                          placeholder="Nombre de quien revisa y aprueba"
+                          className="h-9 rounded-xl font-bold text-slate-800"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Firma Digital</Label>
+                        <div className="border-2 border-slate-100 rounded-xl bg-slate-50/50 overflow-hidden relative group">
+                          <SignatureCanvas 
+                            ref={inventoryApprovedSigRef}
+                            penColor="black"
+                            canvasProps={{ className: "w-full h-24 cursor-crosshair" }}
+                          />
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute top-2 right-2 rounded-full h-8 w-8 bg-white shadow-sm hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => inventoryApprovedSigRef.current?.clear()}
+                            type="button"
+                          >
+                            <Eraser className="h-4 w-4 text-slate-500" />
+                          </Button>
+                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none">
+                            <p className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">Dibuje su firma aquí</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Action Buttons */}
               <div className="flex justify-end gap-3 pt-2">
                 <Button 
@@ -1993,6 +2172,15 @@ export default function MinorDevices() {
                                 title="Descargar PDF"
                               >
                                 <FileText className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => setInventoryToDelete(inv)}
+                                className="h-8 w-8 p-0 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Eliminar Inventario"
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </td>
                           </tr>
@@ -2096,6 +2284,40 @@ export default function MinorDevices() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Signatures display in Detail Modal */}
+              {(selectedPastInventory.performedBySignature || selectedPastInventory.approvedBySignature) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-slate-100">
+                  {selectedPastInventory.performedBySignature && (
+                    <div className="space-y-1 text-center">
+                      <span className="block font-black text-[10px] text-slate-400 uppercase tracking-wider mb-1">Responsable del Inventario</span>
+                      <div className="border border-slate-100 rounded-xl p-2 bg-slate-50/50 flex justify-center items-center h-24">
+                        <img 
+                          src={selectedPastInventory.performedBySignature} 
+                          alt="Firma Responsable" 
+                          className="max-h-20 max-w-full object-contain" 
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 mt-1">{selectedPastInventory.performedByName}</p>
+                    </div>
+                  )}
+                  {selectedPastInventory.approvedBySignature && (
+                    <div className="space-y-1 text-center">
+                      <span className="block font-black text-[10px] text-slate-400 uppercase tracking-wider mb-1">Revisado y Aprobado por</span>
+                      <div className="border border-slate-100 rounded-xl p-2 bg-slate-50/50 flex justify-center items-center h-24">
+                        <img 
+                          src={selectedPastInventory.approvedBySignature} 
+                          alt="Firma Aprobado" 
+                          className="max-h-20 max-w-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 mt-1">{selectedPastInventory.approvedByName || 'Coordinador de Servicio / Calidad'}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button 
