@@ -70,6 +70,9 @@ export default function Reports() {
       })) as MaintenanceReport[];
       setReports(data);
       setLoading(false);
+    }, (error) => {
+      console.warn("Reports snapshot error:", error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
