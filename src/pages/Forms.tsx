@@ -18,9 +18,12 @@ import {
   Loader2,
   ArrowLeft,
   Settings2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Edit2,
+  Trash2,
+  X
 } from 'lucide-react';
-import { collection, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Equipment, Service } from '@/types';
 import EquipmentForm from '@/components/forms/EquipmentForm';
@@ -44,24 +47,42 @@ export default function Forms() {
   const [activeForm, setActiveForm] = React.useState<FormType>(null);
   const [showExtraForms, setShowExtraForms] = React.useState(false);
   const [equipmentList, setEquipmentList] = React.useState<Equipment[]>([]);
+  const [services, setServices] = React.useState<Service[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedEquipment, setSelectedEquipment] = React.useState<Equipment | null>(null);
   const [maintenanceMode, setMaintenanceMode] = React.useState<'manual' | 'external' | null>(null);
   const [newServiceName, setNewServiceName] = React.useState('');
+  const [editingServiceId, setEditingServiceId] = React.useState<string | null>(null);
   const [savingService, setSavingService] = React.useState(false);
 
   React.useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'equipment'), (snapshot) => {
+    const unsubscribeEq = onSnapshot(collection(db, 'equipment'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         ...doc.data(),
         id: doc.id
       })) as Equipment[];
       setEquipmentList(data);
       setLoading(false);
+    }, (error) => {
+      console.warn("Forms equipment snapshot error:", error);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
+    const unsubscribeServices = onSnapshot(collection(db, 'services'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Service[];
+      setServices(data);
+    }, (error) => {
+      console.warn("Forms services snapshot error:", error);
+    });
+
+    return () => {
+      unsubscribeEq();
+      unsubscribeServices();
+    };
   }, []);
 
   const filteredEquipment = equipmentList.filter(eq => 
@@ -70,20 +91,75 @@ export default function Forms() {
     eq.assetNumber.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddService = async () => {
+  const handleAddOrUpdateService = async () => {
     if (!newServiceName.trim()) return;
     setSavingService(true);
     try {
-      await addDoc(collection(db, 'services'), {
-        name: newServiceName,
-        createdAt: serverTimestamp()
-      });
-      setNewServiceName('');
-      setActiveForm(null);
-      alert('Servicio añadido exitosamente.');
+      if (editingServiceId) {
+        // Edit existing service
+        await updateDoc(doc(db, 'services', editingServiceId), {
+          name: newServiceName,
+          updatedAt: serverTimestamp()
+        });
+
+        // Update all equipment associated with this service
+        const associatedEquipment = equipmentList.filter(eq => eq.serviceId === editingServiceId);
+        for (const eq of associatedEquipment) {
+          await updateDoc(doc(db, 'equipment', eq.id), {
+            serviceName: newServiceName,
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        setEditingServiceId(null);
+        setNewServiceName('');
+        alert('Servicio actualizado exitosamente.');
+      } else {
+        // Create new service
+        await addDoc(collection(db, 'services'), {
+          name: newServiceName,
+          createdAt: serverTimestamp()
+        });
+        setNewServiceName('');
+        alert('Servicio añadido exitosamente.');
+      }
     } catch (error) {
-      console.error('Error adding service:', error);
-      alert('Error al añadir el servicio.');
+      console.error('Error saving service:', error);
+      alert('Error al guardar el servicio.');
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string, serviceName: string) => {
+    if (!window.confirm(`¿Está seguro de eliminar el servicio "${serviceName}"? Todos los equipos asociados quedarán como "Sin asignar".`)) {
+      return;
+    }
+    
+    setSavingService(true);
+    try {
+      // Find all equipment associated with this service and update to "Sin asignar"
+      const associatedEquipment = equipmentList.filter(eq => eq.serviceId === serviceId);
+      for (const eq of associatedEquipment) {
+        await updateDoc(doc(db, 'equipment', eq.id), {
+          serviceId: '',
+          serviceName: 'Sin asignar',
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      // Delete service document
+      await deleteDoc(doc(db, 'services', serviceId));
+
+      if (editingServiceId === serviceId) {
+        setEditingServiceId(null);
+        setNewServiceName('');
+      }
+
+      alert('Servicio eliminado exitosamente.');
+    } catch (error) {
+      console.error('Error deleting service:', error);
+      alert('Error al eliminar el servicio.');
     } finally {
       setSavingService(false);
     }
@@ -367,38 +443,107 @@ export default function Forms() {
       </Dialog>
 
       {/* New Service Dialog */}
-      <Dialog open={activeForm === 'service'} onOpenChange={(open) => !open && setActiveForm(null)}>
+      <Dialog open={activeForm === 'service'} onOpenChange={(open) => {
+        if (!open) {
+          setActiveForm(null);
+          setEditingServiceId(null);
+          setNewServiceName('');
+        }
+      }}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black">Nuevo Servicio</DialogTitle>
+            <DialogTitle className="text-2xl font-black">Gestión de Servicios</DialogTitle>
             <DialogDescription className="font-medium">
-              Ingrese el nombre del nuevo servicio o área institucional.
+              Cree, edite o elimine las áreas o servicios institucionales.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-6 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="serviceName" className="text-sm font-bold text-slate-700">Nombre del Servicio</Label>
-              <Input 
-                id="serviceName"
-                placeholder="Ej: UCI Neonatal" 
-                className="h-12 rounded-xl border-slate-200"
-                value={newServiceName}
-                onChange={(e) => setNewServiceName(e.target.value)}
-              />
+          <div className="space-y-6 py-2">
+            <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <Label htmlFor="serviceName" className="text-xs font-black uppercase tracking-wider text-slate-500">
+                {editingServiceId ? 'Editar Nombre de Servicio' : 'Nuevo Servicio'}
+              </Label>
+              <div className="flex gap-2 mt-1">
+                <Input 
+                  id="serviceName"
+                  placeholder="Ej: UCI Adultos, Consulta Externa" 
+                  className="h-11 rounded-xl border-slate-200 bg-white"
+                  value={newServiceName}
+                  onChange={(e) => setNewServiceName(e.target.value)}
+                />
+                {editingServiceId && (
+                  <Button 
+                    variant="outline" 
+                    className="rounded-xl h-11 px-3 border-slate-200" 
+                    onClick={() => {
+                      setEditingServiceId(null);
+                      setNewServiceName('');
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 mt-3">
+                <Button 
+                  className="rounded-xl font-bold h-10 px-5 shadow-sm"
+                  onClick={handleAddOrUpdateService}
+                  disabled={savingService || !newServiceName.trim()}
+                >
+                  {savingService ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : editingServiceId ? (
+                    <Edit2 className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Plus className="mr-2 h-4 w-4" />
+                  )}
+                  {editingServiceId ? 'Guardar Cambios' : 'Crear'}
+                </Button>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setActiveForm(null)}>
-                Cancelar
-              </Button>
-              <Button 
-                className="rounded-xl font-bold px-8 shadow-lg shadow-primary/20"
-                onClick={handleAddService}
-                disabled={savingService || !newServiceName.trim()}
-              >
-                {savingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                Crear Servicio
+            <div className="space-y-2">
+              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">Servicios Registrados ({services.length})</h3>
+              <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+                {services.length === 0 ? (
+                  <p className="text-center py-4 text-xs text-slate-400 font-medium">No hay servicios registrados.</p>
+                ) : (
+                  services.map((svc) => (
+                    <div 
+                      key={svc.id}
+                      className="flex items-center justify-between py-2 first:pt-0 group animate-in fade-in duration-300"
+                    >
+                      <span className="font-bold text-sm text-slate-800">{svc.name}</span>
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 rounded-lg hover:bg-sky-50 hover:text-sky-600"
+                          onClick={() => {
+                            setEditingServiceId(svc.id);
+                            setNewServiceName(svc.name);
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 rounded-lg hover:bg-rose-50 hover:text-rose-600"
+                          onClick={() => handleDeleteService(svc.id, svc.name)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button variant="outline" className="rounded-xl font-bold h-11" onClick={() => setActiveForm(null)}>
+                Cerrar
               </Button>
             </div>
           </div>
