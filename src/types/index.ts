@@ -99,6 +99,7 @@ export interface Provider {
   id: string;
   name: string;
   city?: string;
+  address?: string;
   contactName: string;
   phone: string;
   whatsapp?: string;
@@ -243,4 +244,45 @@ export interface AlertConfig {
   checklistLeadDays: number;
   defaultDismissDays: number;
   emailNotifications: boolean;
+}
+
+export interface MinorDevice {
+  id: string;
+  name: string;
+  type: 'instrumental' | 'ropa' | 'manta' | 'kit_rotacion' | 'dispositivo_menor';
+  brand?: string;
+  model?: string;
+  serial?: string;
+  assetNumber?: string;
+  quantity: number;
+  serviceId: string;
+  serviceName?: string;
+  location?: string;
+  status: 'active' | 'maintenance' | 'out_of_service' | 'baja';
+  acquisitionDate?: string;
+  maintenanceFrequency?: number; // in months
+  lastMaintenance?: string; // date string
+  nextMaintenance?: string; // date string
+  calibrationFrequency?: number; // in months
+  lastCalibration?: string; // date string
+  nextCalibration?: string; // date string
+  observations?: string;
+  createdAt?: string;
+}
+
+export interface MinorDeviceReport {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  date: string;
+  type: 'preventive' | 'corrective' | 'calibration';
+  origin: 'internal' | 'external';
+  technicianName?: string; // for internal
+  providerName?: string; // for external
+  certificateNumber?: string; // for external
+  description: string;
+  technicalDiagnosis?: string; // for internal
+  observations?: string;
+  attachmentUrl?: string; // certificate link for external
+  createdAt?: any;
 }
