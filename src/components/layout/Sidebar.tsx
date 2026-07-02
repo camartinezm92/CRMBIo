@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   ShieldCheck,
   Clock,
-  UserCog
+  UserCog,
+  Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,7 @@ export function Sidebar({ isCollapsed }: { isCollapsed?: boolean }) {
   const menuItems: any[] = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/', sectionId: 'dashboard' },
     { icon: Stethoscope, label: 'Inventario', href: '/inventory', sectionId: 'inventory' },
+    { icon: Layers, label: 'Instru. / Menores', href: '/minor-devices', sectionId: 'minor_devices' },
     { icon: ArrowLeftRight, label: 'Traslados', href: '/transfers', sectionId: 'transfers' },
     { icon: Clock, label: 'Cronograma', href: '/schedule', sectionId: 'schedule' },
     { icon: ClipboardList, label: 'Reportes', href: '/reports', sectionId: 'reports' },
@@ -71,6 +73,7 @@ export function Sidebar({ isCollapsed }: { isCollapsed?: boolean }) {
   const filteredMenuItems = menuItems.filter(item => {
     if (isAdmin) return true;
     if (item.sectionId === 'dashboard') return true;
+    if (item.sectionId === 'minor_devices') return true;
     if (item.sectionId === 'settings') return true;
     return user?.permissions?.[item.sectionId]?.view;
   });
@@ -81,6 +84,8 @@ export function Sidebar({ isCollapsed }: { isCollapsed?: boolean }) {
     const q = query(collection(db, 'users'), where('status', '==', 'pending'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setPendingCount(snapshot.size);
+    }, (error) => {
+      console.warn("Sidebar pending users snapshot error:", error);
     });
 
     return () => unsubscribe();
