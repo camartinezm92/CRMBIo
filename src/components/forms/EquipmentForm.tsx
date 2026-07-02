@@ -95,6 +95,8 @@ export default function EquipmentForm({ onCancel, initialData, onSuccess }: Equi
       } else {
         setServices(data);
       }
+    }, (error) => {
+      console.warn("EquipmentForm services snapshot error:", error);
     });
 
     const unsubProviders = onSnapshot(collection(db, 'providers'), (snapshot) => {
@@ -103,6 +105,8 @@ export default function EquipmentForm({ onCancel, initialData, onSuccess }: Equi
         ...doc.data()
       })) as Provider[];
       setProviders(data);
+    }, (error) => {
+      console.warn("EquipmentForm providers snapshot error:", error);
     });
 
     return () => {
