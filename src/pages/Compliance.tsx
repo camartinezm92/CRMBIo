@@ -82,6 +82,8 @@ export default function Compliance() {
       import('@/services/mockData').then(({ mockServices }) => {
         setServices(data.length > 0 ? data : mockServices);
       });
+    }, (error) => {
+      console.warn("Compliance services snapshot error:", error);
     });
 
     // Load last 5 submissions for history preview
@@ -107,6 +109,8 @@ export default function Compliance() {
         const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
         setStats(prev => ({ ...prev, habilitation: Math.round(avg) }));
       }
+    }, (error) => {
+      console.warn("Compliance submissions snapshot error:", error);
     });
 
     // Calculate INVIMA pending
@@ -123,6 +127,8 @@ export default function Compliance() {
         return hasNoInvima || isExpired;
       }).length;
       setStats(prev => ({ ...prev, invimaPending: pendingCount }));
+    }, (error) => {
+      console.warn("Compliance INVIMA snapshot error:", error);
     });
 
     // Count Guías Rápidas
@@ -130,6 +136,8 @@ export default function Compliance() {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Guide[];
       setGuides(data);
       setStats(prev => ({ ...prev, guidesCount: data.length }));
+    }, (error) => {
+      console.warn("Compliance guides snapshot error:", error);
     });
 
     return () => {
