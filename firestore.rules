@@ -72,16 +72,18 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN') ||
-         request.auth.token.email == "ingbiomedico@ucihonda.com.co");
+        (request.auth.token.email == "ingbiomedico@ucihonda.com.co" ||
+         request.auth.uid == "JqWtu7Nm9MXmHls6oEPwGL5ZMH02" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'));
     }
 
     function isActive() {
       return isAuthenticated() && 
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active') ||
-         request.auth.token.email == "ingbiomedico@ucihonda.com.co");
+        (request.auth.token.email == "ingbiomedico@ucihonda.com.co" ||
+         request.auth.uid == "JqWtu7Nm9MXmHls6oEPwGL5ZMH02" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active'));
     }
 
     function isValidUser(data) {
@@ -117,10 +119,21 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      // Allow creation of pending user profile
+      // Allow creation of pending user profile or active admin profile
       allow create: if isAuthenticated() && isOwner(userId) && 
-                    request.resource.data.status == (request.auth.token.email == "ingbiomedico@ucihonda.com.co" ? "active" : "pending") &&
-                    request.resource.data.role == (request.auth.token.email == "ingbiomedico@ucihonda.com.co" ? "ADMIN" : "USER");
+                    (
+                      (
+                        (request.auth.token.email == "ingbiomedico@ucihonda.com.co" || request.auth.uid == "JqWtu7Nm9MXmHls6oEPwGL5ZMH02") && 
+                        request.resource.data.status == "active" && 
+                        request.resource.data.role == "ADMIN"
+                      ) ||
+                      (
+                        request.auth.token.email != "ingbiomedico@ucihonda.com.co" && 
+                        request.auth.uid != "JqWtu7Nm9MXmHls6oEPwGL5ZMH02" && 
+                        request.resource.data.status == "pending" && 
+                        request.resource.data.role == "USER"
+                      )
+                    );
       // Allow users to update their own basic info but not role/status
       allow update: if (isAuthenticated() && isOwner(userId) && 
                        request.resource.data.role == resource.data.role && 
@@ -172,6 +185,18 @@ service cloud.firestore {
     match /config/{configId} {
       allow read: if isActive();
       allow write: if isAdmin();
+    }
+
+    match /minor_devices/{deviceId} {
+      allow read, write: if isActive();
+    }
+
+    match /minor_devices/{deviceId}/reports/{reportId} {
+      allow read, write: if isActive();
+    }
+
+    match /minor_devices_inventories/{inventoryId} {
+      allow read, write: if isActive();
     }
   }
 }
