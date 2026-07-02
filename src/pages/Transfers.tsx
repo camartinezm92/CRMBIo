@@ -42,12 +42,15 @@ export default function Transfers() {
   React.useEffect(() => {
     const q = query(collection(db, 'transfers'), orderBy('date', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      })) as Transfer[];
-      setTransfers(data);
-      setLoading(false);
+       const data = snapshot.docs.map(doc => ({
+         ...doc.data(),
+         id: doc.id
+       })) as Transfer[];
+       setTransfers(data);
+       setLoading(false);
+    }, (error) => {
+       console.warn("Transfers snapshot error:", error);
+       setLoading(false);
     });
 
     return () => unsubscribe();
