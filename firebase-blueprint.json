@@ -87,6 +87,52 @@
         "nextReviewDate": { "type": "string" }
       },
       "required": ["serviceId", "date", "technicianId", "score"]
+    },
+    "MinorDevice": {
+      "title": "MinorDevice",
+      "description": "Minor devices and surgical instruments details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["instrumental", "ropa", "manta", "kit_rotacion", "dispositivo_menor"] },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "serial": { "type": "string" },
+        "quantity": { "type": "number" },
+        "serviceId": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "maintenance", "out_of_service", "baja"] }
+      },
+      "required": ["name", "type", "quantity", "serviceId", "status"]
+    },
+    "MinorDevicesInventory": {
+      "title": "MinorDevicesInventory",
+      "description": "Bi-annual physical inventories of surgical instruments",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "performedBy": { "type": "string" },
+        "performedByName": { "type": "string" },
+        "observations": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "serviceName": { "type": "string" },
+              "location": { "type": "string" },
+              "systemQuantity": { "type": "number" },
+              "physicalQuantity": { "type": "number" },
+              "difference": { "type": "number" }
+            }
+          }
+        },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["date", "performedBy", "performedByName", "items"]
     }
   },
   "firestore": {
@@ -109,6 +155,14 @@
     "/compliance_submissions/{submissionId}": {
       "schema": "ComplianceSubmission",
       "description": "Compliance checklist history"
+    },
+    "/minor_devices/{deviceId}": {
+      "schema": "MinorDevice",
+      "description": "Minor devices and instrumentation"
+    },
+    "/minor_devices_inventories/{inventoryId}": {
+      "schema": "MinorDevicesInventory",
+      "description": "Minor devices physical inventory records"
     }
   }
 }
