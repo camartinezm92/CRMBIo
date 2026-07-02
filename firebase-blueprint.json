@@ -113,6 +113,9 @@
         "date": { "type": "string" },
         "performedBy": { "type": "string" },
         "performedByName": { "type": "string" },
+        "performedBySignature": { "type": "string" },
+        "approvedByName": { "type": "string" },
+        "approvedBySignature": { "type": "string" },
         "observations": { "type": "string" },
         "items": {
           "type": "array",
