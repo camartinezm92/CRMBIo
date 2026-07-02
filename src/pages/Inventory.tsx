@@ -97,6 +97,8 @@ export default function Inventory() {
       })) as Equipment[];
       setEquipmentList(data);
       setLoading(false);
+    }, (error) => {
+      console.warn("Inventory equipment snapshot error:", error);
     });
 
     return () => unsubscribe();
@@ -184,7 +186,7 @@ export default function Inventory() {
       eq.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
       eq.serial.toLowerCase().includes(searchTerm.toLowerCase()) ||
       eq.assetNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      eq.serviceName.toLowerCase().includes(searchTerm.toLowerCase())
+      (eq.serviceName || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Apply status filter
@@ -645,7 +647,7 @@ export default function Inventory() {
                   </TableCell>
                   <TableCell className="px-6 py-5">
                     <Badge variant="outline" className="bg-slate-50 border-slate-200 text-slate-600 rounded-lg">
-                      {eq.serviceName}
+                      {eq.serviceName || 'Sin asignar'}
                     </Badge>
                   </TableCell>
                   <TableCell className="px-6 py-5">
