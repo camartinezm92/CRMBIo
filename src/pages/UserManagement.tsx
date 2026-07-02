@@ -87,6 +87,8 @@ export default function UserManagement() {
         uid: doc.id
       })) as User[];
       setUsers(usersData);
+    }, (error) => {
+      console.warn("UserManagement users snapshot error:", error);
     });
 
     return () => unsubscribe();
