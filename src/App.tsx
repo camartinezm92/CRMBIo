@@ -18,6 +18,7 @@ import EquipmentLifeCycle from './pages/EquipmentLifeCycle';
 import UserManagement from './pages/UserManagement';
 import Landing from './pages/Landing';
 import PendingApproval from './pages/PendingApproval';
+import MinorDevices from './pages/MinorDevices';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -40,6 +41,7 @@ function PageTitle() {
       '/providers': 'Proveedores Móviles',
       '/settings': 'Configuración de Alertas',
       '/users': 'Gestión de Usuarios',
+      '/minor-devices': 'Dispositivos e Instrumental',
       '/login': 'Iniciar Sesión',
       '/welcome': 'Bienvenido',
       '/pending': 'Pendiente de Aprobación'
@@ -62,6 +64,10 @@ function AppRoutes() {
   const { user, loading } = useAuth();
 
   React.useEffect(() => {
+    if (loading || !user || user.status !== 'active' || user.role?.toUpperCase() !== 'ADMIN') {
+      return;
+    }
+
     const checkAndSeedServices = async () => {
       try {
         const snap = await getDocs(collection(db, 'services'));
@@ -95,7 +101,7 @@ function AppRoutes() {
       }
     };
     checkAndSeedServices();
-  }, []);
+  }, [user, loading]);
 
   if (loading) {
     return (
@@ -133,6 +139,7 @@ function AppRoutes() {
         <Route path="/compliance/history" element={<ComplianceHistory />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/providers" element={<Providers />} />
+        <Route path="/minor-devices" element={<MinorDevices />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/users" element={user?.role?.toUpperCase() === 'ADMIN' ? <UserManagement /> : <Navigate to="/" />} />
       </Route>
