@@ -48,6 +48,9 @@ export default function ComplianceHistory() {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ComplianceSubmission[];
       setSubmissions(data);
       setLoading(false);
+    }, (error) => {
+      console.warn("ComplianceHistory submissions snapshot error:", error);
+      setLoading(false);
     });
 
     return () => unsub();
