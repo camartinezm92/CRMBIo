@@ -106,6 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(newUser);
           }
           setLoading(false);
+        }, (error) => {
+          console.warn("User doc onSnapshot error:", error);
+          setLoading(false);
         });
       } else {
         setUser(null);
