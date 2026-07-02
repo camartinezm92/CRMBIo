@@ -173,6 +173,9 @@ export default function Alerts() {
         return [...eqAlerts, ...otherAlerts].sort((a, b) => b.severity === 'critical' ? 1 : -1);
       });
       setLoading(false);
+    }, (error) => {
+      console.warn("Alerts equipment snapshot error:", error);
+      setLoading(false);
     });
 
     // 3. Check Compliance Checklists (Trimestral)
@@ -228,6 +231,8 @@ export default function Alerts() {
             const eqAlerts = prev.filter(a => a.type !== 'checklist');
             return [...eqAlerts, ...checklistAlerts].sort((a, b) => (a.severity === 'critical' ? -1 : 1));
           });
+        }, (error) => {
+          console.warn("Alerts submissions snapshot error:", error);
         });
       };
 
@@ -242,6 +247,8 @@ export default function Alerts() {
       }
 
       return () => unsubSub();
+    }, (error) => {
+      console.warn("Alerts services snapshot error:", error);
     });
 
     return () => {
