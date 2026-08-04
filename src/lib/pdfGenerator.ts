@@ -742,16 +742,85 @@ export const generateMaintenancePDF = (report: MaintenanceReport, returnBase64?:
 
   currentY = (doc as any).lastAutoTable.finalY;
 
+  // --- 12. EVIDENCIA FOTOGRÁFICA ---
+  if (report.photos && report.photos.length > 0) {
+    if (currentY > doc.internal.pageSize.getHeight() - 40) {
+      doc.addPage();
+      currentY = margin;
+    } else {
+      currentY += 2;
+    }
+
+    doc.setFillColor(200, 220, 240);
+    doc.rect(margin, currentY, contentWidth, 5, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('12. EVIDENCIA FOTOGRÁFICA', pageWidth / 2, currentY + 3.5, { align: 'center' });
+
+    currentY += 7;
+
+    const gap = 4;
+    const imgWidth = (contentWidth - gap) / 2;
+    const imgHeight = 52;
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    for (let i = 0; i < report.photos.length; i += 2) {
+      if (currentY + imgHeight > pageHeight - 20) {
+        doc.addPage();
+        currentY = margin + 5;
+      }
+
+      const photo1 = report.photos[i];
+      const photo2 = report.photos[i + 1];
+
+      if (photo1) {
+        const x1 = margin;
+        try {
+          doc.setDrawColor(200, 200, 200);
+          doc.rect(x1, currentY, imgWidth, imgHeight);
+          doc.addImage(photo1, 'JPEG', x1 + 1, currentY + 1, imgWidth - 2, imgHeight - 2);
+        } catch (e) {
+          try {
+            doc.addImage(photo1, x1 + 1, currentY + 1, imgWidth - 2, imgHeight - 2);
+          } catch (err) {
+            console.error('Error adding photo1 to PDF:', err);
+          }
+        }
+      }
+
+      if (photo2) {
+        const x2 = margin + imgWidth + gap;
+        try {
+          doc.setDrawColor(200, 200, 200);
+          doc.rect(x2, currentY, imgWidth, imgHeight);
+          doc.addImage(photo2, 'JPEG', x2 + 1, currentY + 1, imgWidth - 2, imgHeight - 2);
+        } catch (e) {
+          try {
+            doc.addImage(photo2, x2 + 1, currentY + 1, imgWidth - 2, imgHeight - 2);
+          } catch (err) {
+            console.error('Error adding photo2 to PDF:', err);
+          }
+        }
+      }
+
+      currentY += imgHeight + gap;
+    }
+  }
+
   // Si queda poco espacio (menos de 60px), saltamos de página antes de poner las firmas para evitar que se corten/sobrepongan.
   if (currentY > doc.internal.pageSize.getHeight() - 60) {
     doc.addPage();
     currentY = margin;
+  } else {
+    currentY += 2;
   }
 
-  // --- 12. ENTREGA DEL EQUIPO ---
+  // --- 13. ENTREGA DEL EQUIPO ---
   doc.setFillColor(200, 220, 240);
   doc.rect(margin, currentY, contentWidth, 5, 'F');
-  doc.text('12. ENTREGA DEL EQUIPO', pageWidth / 2, currentY + 3.5, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('13. ENTREGA DEL EQUIPO', pageWidth / 2, currentY + 3.5, { align: 'center' });
 
   autoTable(doc, {
     startY: currentY + 5,
