@@ -22,6 +22,7 @@ import {
   Trash2, 
   FileUp,
   Image as ImageIcon,
+  Camera,
   Eraser,
   PenTool
 } from 'lucide-react';
@@ -128,6 +129,8 @@ export default function MaintenanceForm({ equipment, onCancel, onSuccess, initia
 
   const [spareParts, setSpareParts] = React.useState<SparePart[]>([]);
   const [attachmentFile, setAttachmentFile] = React.useState<File | null>(null);
+  const [photos, setPhotos] = React.useState<string[]>([]);
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
   const [verificationItems, setVerificationItems] = React.useState<VerificationItem[]>([
     { name: 'VERIFICACIÓN DE FUNCIONAMIENTO GENERAL', status: 'CU' },
     { name: 'VERIFICACIÓN DEL BOMBILLO', status: 'CU' },
@@ -138,6 +141,68 @@ export default function MaintenanceForm({ equipment, onCancel, onSuccess, initia
     { name: 'LIMPIEZA Y DESINFECCIÓN', status: 'CU' },
     { name: 'PRUEBA DE CARGA (SI APLICA)', status: 'CU' },
   ]);
+
+  const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.82): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth || height > maxHeight) {
+            if (width / height > maxWidth / maxHeight) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context error'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = (err) => reject(err);
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePhotosSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newPhotos: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const compressed = await compressImage(file);
+        newPhotos.push(compressed);
+      } catch (err) {
+        console.error('Error compressing image:', err);
+      }
+    }
+
+    setPhotos(prev => [...prev, ...newPhotos].slice(0, 8));
+    if (e.target) e.target.value = '';
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   const getSignatureData = (ref: React.RefObject<SignatureCanvas>) => {
     if (!ref.current || ref.current.isEmpty()) return null;
@@ -206,6 +271,7 @@ export default function MaintenanceForm({ equipment, onCancel, onSuccess, initia
         technicianId: user?.uid,
         spareParts,
         verificationItems,
+        photos,
         deliveredBySignature: getSignatureData(deliverySigRef),
         receivedBySignature: getSignatureData(receptionSigRef),
       };
@@ -666,10 +732,87 @@ export default function MaintenanceForm({ equipment, onCancel, onSuccess, initia
             />
           </div>
 
-          {/* Section 12: Signatures */}
+          {/* Section 12: Photographic Evidence */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <span className="bg-primary text-white h-5 w-5 rounded-full flex items-center justify-center text-[10px]">12</span>
+                Evidencia Fotográfica
+              </h3>
+              <div>
+                <input 
+                  type="file" 
+                  ref={photoInputRef} 
+                  onChange={handlePhotosSelected} 
+                  accept="image/*" 
+                  multiple 
+                  className="hidden" 
+                />
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => photoInputRef.current?.click()} 
+                  className="rounded-xl h-9 bg-white shadow-sm hover:bg-slate-50 border-slate-200 font-bold text-xs"
+                >
+                  <Camera className="mr-2 h-4 w-4 text-primary" />
+                  Adjuntar Fotos / Evidencia
+                </Button>
+              </div>
+            </div>
+
+            {photos.length === 0 ? (
+              <div 
+                onClick={() => photoInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-200 hover:border-primary/50 rounded-2xl p-6 text-center cursor-pointer transition-colors bg-slate-50/50 hover:bg-slate-50"
+              >
+                <div className="mx-auto w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2">
+                  <Camera className="h-5 w-5" />
+                </div>
+                <p className="text-xs font-bold text-slate-700">Haga clic para adjuntar fotos de evidencia técnica</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Las imágenes se optimizarán e imprimirán directamente en el reporte PDF.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  {photos.map((photo, idx) => (
+                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square shadow-sm">
+                      <img 
+                        src={photo} 
+                        alt={`Evidencia ${idx + 1}`} 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="h-8 w-8 rounded-full shadow-lg"
+                          onClick={() => removePhoto(idx)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <span className="absolute bottom-1.5 left-1.5 text-[9px] font-black bg-slate-900/70 text-white px-2 py-0.5 rounded-md">
+                        Foto #{idx + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium text-right">
+                  {photos.length} foto(s) adjunta(s) (máximo 8)
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Section 13: Signatures */}
           <div className="space-y-4 pt-6 border-t">
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-              <span className="bg-primary text-white h-5 w-5 rounded-full flex items-center justify-center text-[10px]">12</span>
+              <span className="bg-primary text-white h-5 w-5 rounded-full flex items-center justify-center text-[10px]">13</span>
               Firmas de Entrega y Recepción
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
