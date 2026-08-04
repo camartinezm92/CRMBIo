@@ -169,6 +169,7 @@ export interface MaintenanceReport {
   receivedByRole: string;
   deliveredBySignature?: string; // base64 image
   receivedBySignature?: string; // base64 image
+  photos?: string[]; // base64 photographic evidence images
   pauseDuration?: string; // e.g., "2h 15m"
   calibrationDate?: string;
   nextCalibrationDate?: string;
