@@ -272,6 +272,25 @@ export default function Reports() {
                 </div>
               </div>
 
+              {selectedReport.photos && selectedReport.photos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Evidencia Fotográfica ({selectedReport.photos.length})</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    {selectedReport.photos.map((photo, idx) => (
+                      <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 aspect-video bg-white shadow-sm">
+                        <img 
+                          src={photo} 
+                          alt={`Evidencia ${idx + 1}`} 
+                          className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" 
+                          onClick={() => window.open(photo, '_blank')}
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="outline" className="rounded-xl font-bold" onClick={() => setSelectedReport(null)}>
                   Cerrar
